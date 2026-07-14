@@ -121,9 +121,9 @@ public class Collection_ implements Serializable {
 
     public List<KV> scan() {
         Map<String, KV> merged = new TreeMap<>(data);
-        for (Path p : sstablePaths) {
+        for (int i = sstablePaths.size() - 1; i >= 0; i--) {
             try {
-                for (KV kv : SstableUtil.scanAll(p)) {
+                for (KV kv : SstableUtil.scanAll(sstablePaths.get(i))) {
                     if (!tombstones.contains(kv.getKey())) {
                         merged.putIfAbsent(kv.getKey(), kv);
                     }
@@ -143,9 +143,9 @@ public class Collection_ implements Serializable {
             }
         }
         Map<String, KV> sstMap = new TreeMap<>();
-        for (Path p : sstablePaths) {
+        for (int i = sstablePaths.size() - 1; i >= 0; i--) {
             try {
-                for (KV kv : SstableUtil.scanAll(p)) {
+                for (KV kv : SstableUtil.scanAll(sstablePaths.get(i))) {
                     if (kv.getKey().startsWith(prefix) && !data.containsKey(kv.getKey())) {
                         sstMap.putIfAbsent(kv.getKey(), kv);
                     }
