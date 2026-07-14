@@ -67,27 +67,13 @@ public class Database {
 
     private void autoSave() {
         for (String db : dirtyDatabases) {
-            String prev = currentDatabase;
-            currentDatabase = db;
             try {
-                Path dbPath = Paths.get(DATA_DIR, db + DB_EXTENSION);
                 if (databases.containsKey(db)) {
-                    try (ObjectOutputStream oos = new ObjectOutputStream(
-                            new FileOutputStream(dbPath.toFile()))) {
-                        oos.writeObject(databases.get(db));
-                    }
-                    WalWriter wal = walWriters.get(db);
-                    if (wal != null) {
-                        wal.checkpoint();
-                        wal.truncate();
-                    }
-                    dirtyDatabases.remove(db);
+                    saveDatabase(db);
                     LOG.info("自动保存数据库 '" + db + "' 成功");
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 LOG.warning("自动保存数据库 '" + db + "' 失败: " + e.getMessage());
-            } finally {
-                currentDatabase = prev;
             }
         }
     }
@@ -409,10 +395,15 @@ public class Database {
 
     private Response saveDatabase(String dbName) {
         try {
-            Path dbPath = Paths.get(DATA_DIR, dbName + DB_EXTENSION);
-            try (ObjectOutputStream oos = new ObjectOutputStream(
-                    new FileOutputStream(dbPath.toFile()))) {
-                oos.writeObject(databases.get(dbName));
+            String dbDir = Paths.get(DATA_DIR, dbName).toString();
+            ConcurrentHashMap<String, Collection_> db = databases.get(dbName);
+            if (db == null) return Response.fail("数据库 '" + dbName + "' 不存在");
+            int flushed = 0;
+            for (Collection_ col : db.values()) {
+                if (!col.isEmpty()) {
+                    col.flush(dbDir);
+                    flushed++;
+                }
             }
             WalWriter wal = walWriters.get(dbName);
             if (wal != null) {
@@ -420,13 +411,7 @@ public class Database {
                 wal.truncate();
             }
             dirtyDatabases.remove(dbName);
-            if (compressionService.needRotate(dbPath)) {
-                int gen = nextGeneration(dbName);
-                Path rotated = compressionService.rotate(dbPath, gen);
-                compressionService.compressAsync(rotated);
-                return Response.ok("数据已保存，文件已旋转 (gen=" + gen + ")，后台压缩中");
-            }
-            return Response.ok("数据已保存到 " + dbPath);
+            return Response.ok("数据已保存 (flush " + flushed + " 个集合到 SSTable)");
         } catch (IOException e) {
             return Response.fail("保存失败: " + e.getMessage());
         }
@@ -436,31 +421,42 @@ public class Database {
         return new HashSet<>(dirtyDatabases);
     }
 
-    @SuppressWarnings("unchecked")
     public Response load(String name) {
-        if (name != null) {
-            currentDatabase = name;
-        }
+        if (name != null) currentDatabase = name;
         if (currentDatabase == null) return Response.fail("请指定数据库名称");
         try {
-            Path dbPath = Paths.get(DATA_DIR, currentDatabase + DB_EXTENSION);
-            if (!Files.exists(dbPath)) {
-                return Response.fail("未找到已保存的数据文件: " + dbPath);
+            String dbDir = Paths.get(DATA_DIR, currentDatabase).toString();
+            Path sstDir = Paths.get(dbDir, "sst");
+            ConcurrentHashMap<String, Collection_> db = databases.get(currentDatabase);
+            if (db == null) {
+                db = new ConcurrentHashMap<>();
+                databases.put(currentDatabase, db);
             }
-            try (ObjectInputStream ois = new ObjectInputStream(
-                    new FileInputStream(dbPath.toFile()))) {
-                ConcurrentHashMap<String, Collection_> loaded =
-                    (ConcurrentHashMap<String, Collection_>) ois.readObject();
-                databases.put(currentDatabase, loaded);
+            if (Files.exists(sstDir)) {
+                Map<String, List<Path>> colFiles = new HashMap<>();
+                try (DirectoryStream<Path> ds = Files.newDirectoryStream(sstDir, "*" + ".sst")) {
+                    for (Path p : ds) {
+                        String fname = p.getFileName().toString();
+                        String cname = SstableUtil.parseCollection(fname);
+                        colFiles.computeIfAbsent(cname, k -> new ArrayList<>()).add(p);
+                    }
+                }
+                for (Map.Entry<String, List<Path>> e : colFiles.entrySet()) {
+                    List<Path> paths = e.getValue();
+                    paths.sort(Comparator.comparingInt(p -> SstableUtil.parseSeq(p.getFileName().toString())));
+                    Collection_ col = db.get(e.getKey());
+                    if (col == null) {
+                        col = new Collection_(e.getKey());
+                        db.put(e.getKey(), col);
+                    }
+                    col.assignSstables(paths);
+                }
             }
-            // WAL recovery: 回放WAL中的操作，恢复到崩溃前状态
             WalWriter wal = getWal();
-            if (wal != null) {
-                replayWal(currentDatabase);
-            }
+            if (wal != null) replayWal(currentDatabase);
             dirtyDatabases.remove(currentDatabase);
-            return Response.ok("数据已从 " + dbPath + " 加载 (含WAL回放)");
-        } catch (IOException | ClassNotFoundException e) {
+            return Response.ok("数据已从 " + sstDir + " 加载 (SSTable)，含WAL回放");
+        } catch (IOException e) {
             return Response.fail("加载失败: " + e.getMessage());
         }
     }
@@ -469,13 +465,13 @@ public class Database {
         int loaded = 0;
         int recovered = 0;
         File dataDir = new File(DATA_DIR);
-        File[] files = dataDir.listFiles((dir, name) -> name.endsWith(DB_EXTENSION));
-        if (files == null) return Response.ok("未发现已保存的数据库");
-        for (File f : files) {
-            String dbName = f.getName().substring(0, f.getName().length() - DB_EXTENSION.length());
-            if (!databases.containsKey(dbName)) {
-                databases.put(dbName, new ConcurrentHashMap<>());
-            }
+        File[] dbDirs = dataDir.listFiles(File::isDirectory);
+        if (dbDirs == null) return Response.ok("未发现已保存的数据库");
+        for (File dir : dbDirs) {
+            Path sstDir = dir.toPath().resolve("sst");
+            if (!Files.exists(sstDir)) continue;
+            String dbName = dir.getName();
+            databases.putIfAbsent(dbName, new ConcurrentHashMap<>());
             String prev = currentDatabase;
             currentDatabase = dbName;
             Response resp = load(dbName);
@@ -523,8 +519,22 @@ public class Database {
 
     private void deleteDatabaseFiles(String name) {
         try {
-            Path dbPath = Paths.get(DATA_DIR, name + DB_EXTENSION);
-            Files.deleteIfExists(dbPath);
+            Path sstDir = Paths.get(DATA_DIR, name, "sst");
+            if (Files.exists(sstDir)) {
+                try (var files = Files.walk(sstDir)) {
+                    files.sorted(Comparator.reverseOrder())
+                         .map(java.nio.file.Path::toFile)
+                         .forEach(File::delete);
+                }
+            }
+            Path dbDir = Paths.get(DATA_DIR, name);
+            if (Files.exists(dbDir)) {
+                try (var files = Files.walk(dbDir)) {
+                    files.sorted(Comparator.reverseOrder())
+                         .map(java.nio.file.Path::toFile)
+                         .forEach(File::delete);
+                }
+            }
         } catch (IOException ignored) {}
     }
 
@@ -549,12 +559,19 @@ public class Database {
         status.put("currentDatabase", currentDatabase);
         status.put("totalDatabases", databases.size());
 
-        Map<String, Integer> dbSizes = new LinkedHashMap<>();
+        Map<String, Object> dbInfo = new LinkedHashMap<>();
         for (Map.Entry<String, ConcurrentHashMap<String, Collection_>> entry : databases.entrySet()) {
-            int collectionCount = entry.getValue().size();
-            dbSizes.put(entry.getKey(), collectionCount);
+            Map<String, Object> cols = new LinkedHashMap<>();
+            for (Collection_ col : entry.getValue().values()) {
+                Map<String, Object> ci = new LinkedHashMap<>();
+                ci.put("memtable", col.size());
+                ci.put("sstables", col.sstableCount());
+                cols.put(col.getName(), ci);
+            }
+            dbInfo.put(entry.getKey(), cols);
         }
-        status.put("databases", dbSizes);
+        status.put("databases", dbInfo);
+        status.put("storage", "LSM (MemTable + SSTable)");
         status.put("dirtyDatabases", new HashSet<>(dirtyDatabases));
         status.put("autoSaveIntervalMs", AUTO_SAVE_INTERVAL_MS);
         status.put("rotateThreshold", CompressionService.getRotateThreshold() + " bytes");

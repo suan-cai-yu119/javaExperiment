@@ -731,14 +731,48 @@ public class ConsoleUI {
          return tokens.toArray(new String[0]);
      }
      
-     private Object parseValue(String s) {
-         // 尝试解析为整数
-         try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
-         // 尝试解析为浮点数
-         try { return Double.parseDouble(s); } catch (NumberFormatException ignored) {}
-         // 默认为字符串
-         return s;
-     }
+      private Object parseValue(String s) {
+          s = s.trim();
+          // 列表 [a,b,c]
+          if (s.startsWith("[") && s.endsWith("]")) {
+              String inner = s.substring(1, s.length() - 1).trim();
+              if (inner.isEmpty()) return new ArrayList<>();
+              List<Object> list = new ArrayList<>();
+              for (String item : inner.split(",")) {
+                  list.add(parseValue(item.trim()));
+              }
+              return list;
+          }
+          // 集合 (a,b,c)
+          if (s.startsWith("(") && s.endsWith(")")) {
+              String inner = s.substring(1, s.length() - 1).trim();
+              if (inner.isEmpty()) return new HashSet<>();
+              Set<Object> set = new LinkedHashSet<>();
+              for (String item : inner.split(",")) {
+                  set.add(parseValue(item.trim()));
+              }
+              return set;
+          }
+          // 嵌套对象 {k1:v1,k2:v2}
+          if (s.startsWith("{") && s.endsWith("}")) {
+              String inner = s.substring(1, s.length() - 1).trim();
+              if (inner.isEmpty()) return new LinkedHashMap<>();
+              Map<String, Object> map = new LinkedHashMap<>();
+              for (String pair : inner.split(",")) {
+                  int colon = pair.indexOf(':');
+                  if (colon > 0) {
+                      String k = pair.substring(0, colon).trim();
+                      String v = pair.substring(colon + 1).trim();
+                      if (!k.isEmpty()) map.put(k, parseValue(v));
+                  }
+              }
+              return map;
+          }
+          // 数字
+          try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
+          try { return Double.parseDouble(s); } catch (NumberFormatException ignored) {}
+          return s;
+      }
      
       private String truncate(String s, int maxLen) {
           if (s == null) return "null";
