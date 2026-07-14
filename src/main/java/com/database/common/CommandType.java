@@ -15,13 +15,15 @@
      DROP_COLLECTION,
      LIST_COLLECTIONS,
      
-     // 键值操作
-     PUT,
-     GET,
-     DELETE,
-     UPDATE,
-     SCAN,
-     LIST_KEYS,
+      // 键值操作
+      PUT,
+      GET,
+      DELETE,
+      UPDATE,
+      SCAN,
+      LIST_KEYS,
+      BATCH_PUT,
+      BATCH_UPDATE,
      
      // 持久化
      SAVE,

@@ -89,9 +89,12 @@ public class ConsoleUI {
              case "UPDATE", "UPD" -> handleUpdate(args);
              case "SCAN", "SC" -> handleScan(args);
              
-             // 持久化
-             case "SAVE", "SV" -> handleSave(args);
-             case "LOAD", "LD" -> handleLoad(args);
+              // 批量操作
+              case "BATCH", "B" -> handleBatch(args);
+
+              // 持久化
+              case "SAVE", "SV" -> handleSave(args);
+              case "LOAD", "LD" -> handleLoad(args);
              
               // 系统
               case "HELP", "H", "?" -> printHelp();
@@ -293,11 +296,54 @@ public class ConsoleUI {
      
       private void handleUpdate(String[] args) {
           if (args.length < 3) {
-              System.out.println("✗ 用法: UPDATE <collection> <key> <field:value> ...  ($set 更新指定字段)");
+              System.out.println("✗ 用法: UPDATE <collection> <key> <f:v> ... 或 UPDATE <collection> WHERE <f>=<v> <sf:sv> ...");
               return;
           }
           Request req = new Request(CommandType.UPDATE);
           req.setCollectionName(args[0]);
+
+          // UPDATE <col> WHERE <field> = <value> <sf:sv> ...  (批量条件更新)
+          if (args.length >= 3 && "WHERE".equalsIgnoreCase(args[1])) {
+              int setStart;
+              if (args.length >= 5 && "=".equals(args[3])) {
+                  req.setFilterField(args[2]);
+                  req.setFilterValue(parseValue(args[4]));
+                  setStart = 5;
+              } else if (args.length >= 4 && args[3].contains("=")) {
+                  int eq = args[3].indexOf('=');
+                  req.setFilterField(args[3].substring(0, eq));
+                  req.setFilterValue(parseValue(args[3].substring(eq + 1)));
+                  setStart = 4;
+              } else if (args.length >= 3 && args[2].contains("=")) {
+                  int eq = args[2].indexOf('=');
+                  req.setFilterField(args[2].substring(0, eq));
+                  req.setFilterValue(parseValue(args[2].substring(eq + 1)));
+                  setStart = 3;
+              } else {
+                  System.out.println("✗ 用法: UPDATE <collection> WHERE <field> = <value> <field:value> ...");
+                  return;
+              }
+              Map<String, Object> setData = new LinkedHashMap<>();
+              for (int i = setStart; i < args.length; i++) {
+                  int colon = args[i].indexOf(':');
+                  if (colon > 0) {
+                      String field = args[i].substring(0, colon);
+                      String val = args[i].substring(colon + 1);
+                      if (!field.isEmpty()) {
+                          setData.put(field, parseValue(val));
+                      }
+                  }
+              }
+              if (setData.isEmpty()) {
+                  System.out.println("✗ 请指定要更新的字段");
+                  return;
+              }
+              req.setValue(setData);
+              printResponse(client.sendRequest(req));
+              return;
+          }
+
+          // UPDATE <col> <key> <f:v> ...  (单文档)
           req.setKey(args[1]);
           if (args.length == 3 && !args[2].contains(":")) {
               req.setValue(parseValue(args[2]));
@@ -316,6 +362,87 @@ public class ConsoleUI {
               req.setValue(doc);
           }
           printResponse(client.sendRequest(req));
+      }
+
+      private void handleBatch(String[] args) {
+          if (args.length < 2) {
+              System.out.println("✗ 用法: BATCH PUT|UPDATE <collection> <k1> <f:v> ... || <k2> <f:v> ...");
+              return;
+          }
+          String subCmd = args[0].toUpperCase();
+          String[] batchArgs = Arrays.copyOfRange(args, 1, args.length);
+          switch (subCmd) {
+              case "PUT", "P" -> handleBatchPut(batchArgs);
+              case "UPDATE", "UPD" -> handleBatchUpdate(batchArgs);
+              default -> System.out.println("✗ 未知子命令: " + subCmd + "，可用: PUT, UPDATE");
+          }
+      }
+
+      private void handleBatchPut(String[] batchArgs) {
+          if (batchArgs.length < 2) {
+              System.out.println("✗ 用法: BATCH PUT <collection> <k1> <f:v> ... || <k2> <f:v> ...");
+              return;
+          }
+          Request req = new Request(CommandType.BATCH_PUT);
+          req.setCollectionName(batchArgs[0]);
+          Map<String, Object> entries = parseBatchEntries(
+                  Arrays.copyOfRange(batchArgs, 1, batchArgs.length));
+          if (entries.isEmpty()) {
+              System.out.println("✗ 没有有效的条目");
+              return;
+          }
+          req.setBatchData(entries);
+          printResponse(client.sendRequest(req));
+      }
+
+      private void handleBatchUpdate(String[] batchArgs) {
+          if (batchArgs.length < 2) {
+              System.out.println("✗ 用法: BATCH UPDATE <collection> <k1> <f:v> ... || <k2> <f:v> ...");
+              return;
+          }
+          Request req = new Request(CommandType.BATCH_UPDATE);
+          req.setCollectionName(batchArgs[0]);
+          Map<String, Object> entries = parseBatchEntries(
+                  Arrays.copyOfRange(batchArgs, 1, batchArgs.length));
+          if (entries.isEmpty()) {
+              System.out.println("✗ 没有有效的条目");
+              return;
+          }
+          req.setBatchData(entries);
+          printResponse(client.sendRequest(req));
+      }
+
+      private Map<String, Object> parseBatchEntries(String[] tokens) {
+          Map<String, Object> entries = new LinkedHashMap<>();
+          String currentKey = null;
+          Map<String, Object> currentDoc = null;
+          for (String token : tokens) {
+              if ("||".equals(token)) {
+                  if (currentKey != null) {
+                      entries.put(currentKey, currentDoc);
+                      currentKey = null;
+                      currentDoc = null;
+                  }
+              } else if (token.contains(":")) {
+                  if (currentKey == null) continue;
+                  int colon = token.indexOf(':');
+                  String field = token.substring(0, colon);
+                  String val = token.substring(colon + 1);
+                  if (!field.isEmpty()) {
+                      currentDoc.put(field, parseValue(val));
+                  }
+              } else {
+                  if (currentKey != null) {
+                      entries.put(currentKey, currentDoc);
+                  }
+                  currentKey = token;
+                  currentDoc = new LinkedHashMap<>();
+              }
+          }
+          if (currentKey != null) {
+              entries.put(currentKey, currentDoc);
+          }
+          return entries;
       }
      
        private void handleScan(String[] args) {
@@ -501,9 +628,14 @@ public class ConsoleUI {
                   ║    UPDATE <col> <key> <f:v>... 更新指定字段（$set）  ║
                   ║    DELETE <col> <key>          删除文档              ║
                   ║    DELETE <col> WHERE f=v     按条件删除             ║
-                  ║    SCAN <col>                 扫描所有文档           ║
-                 ║                                                    ║
-                 ║  持久化:                                            ║
+                  ║  SCAN <col>                 扫描所有文档           ║
+                  ║                                                    ║
+                  ║  批量操作:                                          ║
+                  ║    BATCH PUT <c> <k1> f:v... \|\| <k2>...  批量插入 ║
+                  ║    BATCH UPDATE <c> <k1> f:v... \|\| <k2>... 批量更新║
+                  ║    UPDATE <c> WHERE f=v sf:sv...   条件批量更新    ║
+                  ║                                                    ║
+                  ║  持久化:                                            ║
                  ║    SAVE                      保存数据               ║
                  ║    LOAD [dbname]             加载数据               ║
                  ║                                                    ║

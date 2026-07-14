@@ -3,11 +3,12 @@
  import com.database.common.*;
  import com.database.core.Database;
  
- import java.io.*;
- import java.net.Socket;
- import java.util.Set;
- import java.util.logging.Level;
- import java.util.logging.Logger;
+import java.io.*;
+import java.net.Socket;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
  
  /**
   * 客户端处理器 - 每个客户端连接对应一个线程
@@ -134,17 +135,35 @@
                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
                   return database.delete(delCol, delKey);
 
-             case UPDATE:
-                 String updCol = request.getCollectionName() != null ?
-                         request.getCollectionName() :
-                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 String updKey = request.getKey() != null ?
-                         request.getKey() :
-                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                 Object updVal = request.getValue();
-                 return database.update(updCol, updKey, updVal);
+              case UPDATE:
+                  String updCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  if (request.getFilterField() != null) {
+                      return database.updateWhere(updCol, request.getFilterField(),
+                              request.getFilterValue(), request.getValue());
+                  }
+                  String updKey = request.getKey() != null ?
+                          request.getKey() :
+                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                  Object updVal = request.getValue();
+                  return database.update(updCol, updKey, updVal);
 
-             case SCAN:
+              case BATCH_PUT: {
+                  String bpCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  return database.batchPut(bpCol, request.getBatchData());
+              }
+
+              case BATCH_UPDATE: {
+                  String buCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  return database.batchUpdate(buCol, request.getBatchData());
+              }
+
+              case SCAN:
                  String scanCol = request.getCollectionName() != null ?
                          request.getCollectionName() :
                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);

@@ -1,7 +1,8 @@
  package com.database.common;
  
- import java.io.Serial;
- import java.io.Serializable;
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.Map;
  
  /**
   * 请求对象 - 客户端发送给服务器的请求
@@ -17,9 +18,10 @@
      private String collectionName;
       private String key;
       private Object value;
-      private String filterField;
-      private Object filterValue;
-      private long timestamp;
+       private String filterField;
+       private Object filterValue;
+       private Map<String, Object> batchData;
+       private long timestamp;
      
      public Request() {
          this.timestamp = System.currentTimeMillis();
@@ -46,7 +48,9 @@
       public void setValue(Object value) { this.value = value; }
       public String getFilterField() { return filterField; }
       public void setFilterField(String filterField) { this.filterField = filterField; }
-      public Object getFilterValue() { return filterValue; }
-      public void setFilterValue(Object filterValue) { this.filterValue = filterValue; }
-      public long getTimestamp() { return timestamp; }
+       public Object getFilterValue() { return filterValue; }
+       public void setFilterValue(Object filterValue) { this.filterValue = filterValue; }
+       public Map<String, Object> getBatchData() { return batchData; }
+       public void setBatchData(Map<String, Object> batchData) { this.batchData = batchData; }
+       public long getTimestamp() { return timestamp; }
  }

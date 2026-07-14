@@ -188,15 +188,66 @@ import java.util.concurrent.ConcurrentHashMap;
          return Response.ok("更新成功", kv);
      }
 
-     public Response scan(String collection) {
-         if (collection == null) {
-             return Response.fail("集合名称不能为空");
-         }
-         Collection_ col = getCollection(collection);
-         if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
-         List<KV> results = col.scan();
-         return Response.ok("扫描完成，共 " + results.size() + " 条记录", results);
-     }
+      public Response scan(String collection) {
+          if (collection == null) {
+              return Response.fail("集合名称不能为空");
+          }
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          List<KV> results = col.scan();
+          return Response.ok("扫描完成，共 " + results.size() + " 条记录", results);
+      }
+
+      public Response batchPut(String collection, Map<String, Object> entries) {
+          if (collection == null || entries == null || entries.isEmpty()) {
+              return Response.fail("参数不能为空");
+          }
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          int count = 0;
+          for (Map.Entry<String, Object> entry : entries.entrySet()) {
+              col.put(entry.getKey(), entry.getValue());
+              count++;
+          }
+          return Response.ok("批量插入成功，共插入 " + count + " 条记录");
+      }
+
+      public Response batchUpdate(String collection, Map<String, Object> entries) {
+          if (collection == null || entries == null || entries.isEmpty()) {
+              return Response.fail("参数不能为空");
+          }
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          int count = 0;
+          for (Map.Entry<String, Object> entry : entries.entrySet()) {
+              KV kv = col.update(entry.getKey(), entry.getValue());
+              if (kv != null) count++;
+          }
+          return Response.ok("批量更新成功，共更新 " + count + " 条记录");
+      }
+
+      public Response updateWhere(String collection, String field, Object value, Object updateData) {
+          if (collection == null || field == null || value == null || updateData == null) {
+              return Response.fail("参数不能为空");
+          }
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          int count = 0;
+          for (KV kv : col.scan()) {
+              Object val = kv.getValue();
+              if (val instanceof Map<?, ?> map) {
+                  Object fieldVal = map.get(field);
+                  if (Objects.equals(fieldVal, value)) {
+                      col.update(kv.getKey(), updateData);
+                      count++;
+                  }
+              }
+          }
+          if (count == 0) {
+              return Response.fail("没有匹配的记录");
+          }
+          return Response.ok("批量更新成功，共更新 " + count + " 条记录");
+      }
      
      // ========== 持久化 ==========
      
