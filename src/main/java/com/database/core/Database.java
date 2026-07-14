@@ -60,12 +60,12 @@
      }
      
      public Set<String> listDatabases() {
-         return databases.keySet();
+         return new HashSet<>(databases.keySet());
      }
-     
+
      public Response useDatabase(String name) {
          if (!databases.containsKey(name)) {
-             return createDatabase(name);
+             return Response.fail("数据库 '" + name + "' 不存在，请先使用 CREATE DATABASE 创建");
          }
          currentDatabase = name;
          return Response.ok("已切换到数据库 '" + name + "'");
@@ -103,53 +103,71 @@
          db.remove(name);
          return Response.ok("集合 '" + name + "' 删除成功");
      }
-     
+
      public Set<String> listCollections() {
          ConcurrentHashMap<String, Collection_> db = getCurrentDB();
          if (db == null) return Collections.emptySet();
-         return db.keySet();
+         return new HashSet<>(db.keySet());
      }
-     
+
      public Collection_ getCollection(String name) {
+         if (name == null) {
+             return null;
+         }
          ConcurrentHashMap<String, Collection_> db = getCurrentDB();
          if (db == null) return null;
          return db.get(name);
      }
-     
+
      // ========== 键值操作 ==========
-     
+
      public Response put(String collection, String key, Object value) {
+         if (collection == null || key == null) {
+             return Response.fail("集合名称和键不能为空");
+         }
          Collection_ col = getCollection(collection);
          if (col == null) return Response.fail("集合 '" + collection + "' 不存在，请先 CREATE COLLECTION");
          KV kv = col.put(key, value);
          return Response.ok("插入成功", kv);
      }
-     
+
      public Response get(String collection, String key) {
+         if (collection == null || key == null) {
+             return Response.fail("集合名称和键不能为空");
+         }
          Collection_ col = getCollection(collection);
          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
          KV kv = col.get(key);
          if (kv == null) return Response.fail("键 '" + key + "' 不存在");
          return Response.ok("查询成功", kv);
      }
-     
+
      public Response delete(String collection, String key) {
+         if (collection == null || key == null) {
+             return Response.fail("集合名称和键不能为空");
+         }
          Collection_ col = getCollection(collection);
          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
          KV kv = col.delete(key);
          if (kv == null) return Response.fail("键 '" + key + "' 不存在");
          return Response.ok("删除成功", kv);
      }
-     
+
      public Response update(String collection, String key, Object value) {
+         if (collection == null || key == null) {
+             return Response.fail("集合名称和键不能为空");
+         }
          Collection_ col = getCollection(collection);
          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
          KV kv = col.update(key, value);
          if (kv == null) return Response.fail("键 '" + key + "' 不存在");
          return Response.ok("更新成功", kv);
      }
-     
+
      public Response scan(String collection) {
+         if (collection == null) {
+             return Response.fail("集合名称不能为空");
+         }
          Collection_ col = getCollection(collection);
          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
          List<KV> results = col.scan();

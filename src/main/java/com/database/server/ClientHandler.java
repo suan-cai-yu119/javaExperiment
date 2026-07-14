@@ -5,6 +5,7 @@
  
  import java.io.*;
  import java.net.Socket;
+ import java.util.Set;
  import java.util.logging.Level;
  import java.util.logging.Logger;
  
@@ -52,9 +53,18 @@
                          break;
                      }
                  } catch (EOFException e) {
+                     LOGGER.info("客户端 #" + clientId + " 正常断开连接");
                      break;
                  } catch (ClassNotFoundException e) {
+                     LOGGER.warning("客户端 #" + clientId + " 发送了无效的请求格式");
                      oos.writeObject(Response.fail("无效的请求格式"));
+                 } catch (java.net.SocketException e) {
+                     if ("Connection reset".equals(e.getMessage())) {
+                         LOGGER.warning("客户端 #" + clientId + " 强制断开连接（Connection reset）");
+                     } else {
+                         LOGGER.log(Level.WARNING, "客户端 #" + clientId + " 网络异常", e);
+                     }
+                     break;
                  }
              }
          } catch (IOException e) {
@@ -73,11 +83,13 @@
          switch (request.getCommand()) {
              // 数据库操作
              case CREATE_DATABASE:
-                 return database.createDatabase(request.getArgs()[0]);
+                 Response createResp = database.createDatabase(request.getArgs()[0]);
+                 return createResp;
              case DROP_DATABASE:
                  return database.dropDatabase(request.getArgs()[0]);
              case LIST_DATABASES:
-                 return Response.ok("数据库列表", database.listDatabases());
+                 Set<String> dbs = database.listDatabases();
+                 return Response.ok("数据库列表", dbs);
              case USE_DATABASE:
                  return database.useDatabase(request.getArgs()[0]);
                  
@@ -88,21 +100,59 @@
                  return database.dropCollection(request.getArgs()[0]);
              case LIST_COLLECTIONS:
                  return Response.ok("集合列表", database.listCollections());
-                 
+
              // 键值操作
              case PUT:
-                 return database.put(request.getCollectionName(), request.getKey(), request.getValue());
+                 // 优先使用字段，如果没有则从 args 获取
+                 String putCol = request.getCollectionName() != null ?
+                         request.getCollectionName() :
+                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                 String putKey = request.getKey() != null ?
+                         request.getKey() :
+                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                 Object putVal = request.getValue();
+                 return database.put(putCol, putKey, putVal);
+
              case GET:
-                 return database.get(request.getCollectionName(), request.getKey());
+                 String getCol = request.getCollectionName() != null ?
+                         request.getCollectionName() :
+                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                 String getKey = request.getKey() != null ?
+                         request.getKey() :
+                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                 return database.get(getCol, getKey);
+
              case DELETE:
-                 return database.delete(request.getCollectionName(), request.getKey());
+                 String delCol = request.getCollectionName() != null ?
+                         request.getCollectionName() :
+                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                 String delKey = request.getKey() != null ?
+                         request.getKey() :
+                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                 return database.delete(delCol, delKey);
+
              case UPDATE:
-                 return database.update(request.getCollectionName(), request.getKey(), request.getValue());
+                 String updCol = request.getCollectionName() != null ?
+                         request.getCollectionName() :
+                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                 String updKey = request.getKey() != null ?
+                         request.getKey() :
+                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                 Object updVal = request.getValue();
+                 return database.update(updCol, updKey, updVal);
+
              case SCAN:
-                 return database.scan(request.getCollectionName());
+                 String scanCol = request.getCollectionName() != null ?
+                         request.getCollectionName() :
+                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                 return database.scan(scanCol);
+
              case LIST_KEYS:
-                 return database.scan(request.getCollectionName());
-                 
+                 String listCol = request.getCollectionName() != null ?
+                         request.getCollectionName() :
+                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                 return database.scan(listCol);
+
              // 持久化
              case SAVE:
                  return database.save();
