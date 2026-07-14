@@ -286,6 +286,16 @@ public KV put(String key, Object value) {
 }
 ```
 
+### bug8:重启程序后，前一个程序删除的内容全回来了
+- 原因：墓碑标记在程序中，而SST和WAL持久化在磁盘中，重启程序后，磁盘中的数据会恢复
+- 修复：
+- 修改：
+```java
+//修改前
+
+// 修改后
+
+```
 
 ### support1:在 mini-db 提示符前显示当前数据库名
 - 说明：使用 `USE DATABASE <name>` 切换到某个数据库后，提示符会变为 `<name> mini-db>`，提示当前所在数据库。
