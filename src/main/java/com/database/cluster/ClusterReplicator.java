@@ -1,5 +1,6 @@
 package com.database.cluster;
 
+import com.database.common.Protocol;
 import com.database.core.Database;
 
 import java.io.*;
