@@ -40,18 +40,18 @@ public class ClusterManager {
 
         if (currentRole == ClusterRole.MASTER) {
             replicator.startMaster();
-            System.out.println("? 集群主节点模式，集群端口: " + clusterPort);
+            System.out.println("✓ 集群主节点模式，集群端口: " + clusterPort);
+            startHeartbeat();
+            electMaster();
         } else {
             String masterHost = getArg(args, "--master-host", "127.0.0.1");
             int masterPort = Integer.parseInt(getArg(args, "--master-port",
                     String.valueOf(Protocol.DEFAULT_PORT)));
             int masterClusterPort = masterPort + Protocol.CLUSTER_PORT_OFFSET;
             replicator.startSlave(masterHost, masterClusterPort);
-            System.out.println("? 集群从节点模式，连接到主节点 " + masterHost + ":" + masterClusterPort);
+            System.out.println("✓ 集群从节点模式，连接到主节点 " + masterHost + ":" + masterClusterPort);
+            startHeartbeat();
         }
-
-        startHeartbeat();
-        electMaster();
     }
 
     private String getArg(String[] args, String key, String defaultVal) {
