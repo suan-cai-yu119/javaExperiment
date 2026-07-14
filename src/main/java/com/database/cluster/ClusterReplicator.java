@@ -174,7 +174,7 @@ public class ClusterReplicator {
 
         SlaveConnection(Socket socket) { this.socket = socket; }
 
-        void send(ClusterMessage msg) {
+        synchronized void send(ClusterMessage msg) {
             if (!active) return;
             try {
                 if (oos == null) oos = new ObjectOutputStream(socket.getOutputStream());
