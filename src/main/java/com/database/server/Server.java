@@ -139,7 +139,7 @@ public class Server {
       
       public static void main(String[] args) {
           int port = Protocol.DEFAULT_PORT;
-          if (args.length > 0) {
+           if (args.length > 0 && !args[0].startsWith("--")) {
               try {
                   port = Integer.parseInt(args[0]);
               } catch (NumberFormatException e) {
