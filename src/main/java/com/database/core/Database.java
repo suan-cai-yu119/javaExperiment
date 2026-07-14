@@ -5,7 +5,8 @@
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
+import java.util.logging.Logger;
  
  /**
   * 数据库核心引擎 - 管理多个数据库，每个数据库包含多个集合（表）
@@ -16,8 +17,10 @@ import java.util.concurrent.ConcurrentHashMap;
   * - 反射 (动态加载自定义类型)
   */
 public class Database {
+    private static final Logger LOG = Logger.getLogger(Database.class.getName());
     private static final String DATA_DIR = "data";
     private static final String DB_EXTENSION = ".db";
+    private static final long AUTO_SAVE_INTERVAL_MS = 60_000;
 
     // 数据库名称 -> 集合名称 -> 集合对象
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Collection_>> databases;
@@ -25,6 +28,12 @@ public class Database {
     private final CompressionService compressionService;
     private final Map<String, WalWriter> walWriters = new ConcurrentHashMap<>();
     private final Map<String, Integer> generationCounters = new ConcurrentHashMap<>();
+    private final Set<String> dirtyDatabases = ConcurrentHashMap.newKeySet();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "auto-save");
+        t.setDaemon(true);
+        return t;
+    });
 
     public Database() {
         this.databases = new ConcurrentHashMap<>();
@@ -32,6 +41,8 @@ public class Database {
             Math.max(2, Runtime.getRuntime().availableProcessors())
         );
         initDataDirectory();
+        scheduler.scheduleWithFixedDelay(this::autoSave,
+                AUTO_SAVE_INTERVAL_MS, AUTO_SAVE_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
     private void initDataDirectory() {
@@ -49,8 +60,39 @@ public class Database {
     private int nextGeneration(String dbName) {
         return generationCounters.merge(dbName, 1, Integer::sum);
     }
-     
-     // ========== 数据库操作 ==========
+
+    private void markDirty() {
+        if (currentDatabase != null) dirtyDatabases.add(currentDatabase);
+    }
+
+    private void autoSave() {
+        for (String db : dirtyDatabases) {
+            String prev = currentDatabase;
+            currentDatabase = db;
+            try {
+                Path dbPath = Paths.get(DATA_DIR, db + DB_EXTENSION);
+                if (databases.containsKey(db)) {
+                    try (ObjectOutputStream oos = new ObjectOutputStream(
+                            new FileOutputStream(dbPath.toFile()))) {
+                        oos.writeObject(databases.get(db));
+                    }
+                    WalWriter wal = walWriters.get(db);
+                    if (wal != null) {
+                        wal.checkpoint();
+                        wal.truncate();
+                    }
+                    dirtyDatabases.remove(db);
+                    LOG.info("自动保存数据库 '" + db + "' 成功");
+                }
+            } catch (IOException e) {
+                LOG.warning("自动保存数据库 '" + db + "' 失败: " + e.getMessage());
+            } finally {
+                currentDatabase = prev;
+            }
+        }
+    }
+
+    // ========== 数据库操作 ==========
      
      public Response createDatabase(String name) {
          if (databases.containsKey(name)) {
@@ -145,10 +187,15 @@ public class Database {
         }
         Collection_ col = getCollection(collection);
         if (col == null) return Response.fail("集合 '" + collection + "' 不存在，请先 CREATE COLLECTION");
-        WalWriter wal = getWal();
-        if (wal != null) wal.logPut(collection, key, value);
-        KV kv = col.put(key, value);
-        return Response.ok("插入成功", kv);
+        try {
+            WalWriter wal = getWal();
+            if (wal != null) wal.logPut(collection, key, value);
+            KV kv = col.put(key, value);
+            markDirty();
+            return Response.ok("插入成功", kv);
+        } catch (IOException e) {
+            return Response.fail("WAL 写入失败，操作已取消: " + e.getMessage());
+        }
     }
 
      public Response get(String collection, String key) {
@@ -170,10 +217,15 @@ public class Database {
         if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
         KV kv = col.get(key);
         if (kv == null) return Response.fail("键 '" + key + "' 不存在");
-        WalWriter wal = getWal();
-        if (wal != null) wal.logDelete(collection, key);
-        col.delete(key);
-        return Response.ok("删除成功", kv);
+        try {
+            WalWriter wal = getWal();
+            if (wal != null) wal.logDelete(collection, key);
+            col.delete(key);
+            markDirty();
+            return Response.ok("删除成功", kv);
+        } catch (IOException e) {
+            return Response.fail("WAL 写入失败，操作已取消: " + e.getMessage());
+        }
     }
 
       public Response deleteWhere(String collection, String field, Object value) {
@@ -200,12 +252,17 @@ public class Database {
           if (toDelete.isEmpty()) {
               return Response.fail("没有匹配的记录");
           }
-          WalWriter wal = getWal();
-          for (String key : toDelete) {
-              if (wal != null) wal.logDelete(collection, key);
-              col.delete(key);
+          try {
+              WalWriter wal = getWal();
+              for (String key : toDelete) {
+                  if (wal != null) wal.logDelete(collection, key);
+                  col.delete(key);
+              }
+              markDirty();
+              return Response.ok("删除成功，共删除 " + toDelete.size() + " 条记录");
+          } catch (IOException e) {
+              return Response.fail("WAL 写入失败，操作已取消 (部分删除可能已执行): " + e.getMessage());
           }
-          return Response.ok("删除成功，共删除 " + toDelete.size() + " 条记录");
       }
 
       public Response update(String collection, String key, Object value) {
@@ -216,10 +273,15 @@ public class Database {
           if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
           KV kv = col.get(key);
           if (kv == null) return Response.fail("键 '" + key + "' 不存在");
-          WalWriter wal = getWal();
-          if (wal != null) wal.logUpdate(collection, key, value);
-          col.update(key, value);
-          return Response.ok("更新成功", col.get(key));
+          try {
+              WalWriter wal = getWal();
+              if (wal != null) wal.logUpdate(collection, key, value);
+              col.update(key, value);
+              markDirty();
+              return Response.ok("更新成功", col.get(key));
+          } catch (IOException e) {
+              return Response.fail("WAL 写入失败，操作已取消: " + e.getMessage());
+          }
       }
 
       public Response scan(String collection) {
@@ -236,39 +298,48 @@ public class Database {
           if (collection == null || entries == null || entries.isEmpty()) {
               return Response.fail("参数不能为空");
           }
-          WalWriter wal = getWal();
           Collection_ col = getCollection(collection);
           if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
-          int count = 0;
-          for (Map.Entry<String, Object> entry : entries.entrySet()) {
-              if (wal != null) wal.logPut(collection, entry.getKey(), entry.getValue());
-              col.put(entry.getKey(), entry.getValue());
-              count++;
+          try {
+              WalWriter wal = getWal();
+              int count = 0;
+              for (Map.Entry<String, Object> entry : entries.entrySet()) {
+                  if (wal != null) wal.logPut(collection, entry.getKey(), entry.getValue());
+                  col.put(entry.getKey(), entry.getValue());
+                  count++;
+              }
+              markDirty();
+              return Response.ok("批量插入成功，共插入 " + count + " 条记录");
+          } catch (IOException e) {
+              return Response.fail("WAL 写入失败，批量操作已取消: " + e.getMessage());
           }
-          return Response.ok("批量插入成功，共插入 " + count + " 条记录");
       }
 
       public Response batchUpdate(String collection, Map<String, Object> entries) {
           if (collection == null || entries == null || entries.isEmpty()) {
               return Response.fail("参数不能为空");
           }
-          WalWriter wal = getWal();
           Collection_ col = getCollection(collection);
           if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
-          int count = 0;
-          for (Map.Entry<String, Object> entry : entries.entrySet()) {
-              if (wal != null) wal.logUpdate(collection, entry.getKey(), entry.getValue());
-              KV kv = col.update(entry.getKey(), entry.getValue());
-              if (kv != null) count++;
+          try {
+              WalWriter wal = getWal();
+              int count = 0;
+              for (Map.Entry<String, Object> entry : entries.entrySet()) {
+                  if (wal != null) wal.logUpdate(collection, entry.getKey(), entry.getValue());
+                  KV kv = col.update(entry.getKey(), entry.getValue());
+                  if (kv != null) count++;
+              }
+              markDirty();
+              return Response.ok("批量更新成功，共更新 " + count + " 条记录");
+          } catch (IOException e) {
+              return Response.fail("WAL 写入失败，批量操作已取消: " + e.getMessage());
           }
-          return Response.ok("批量更新成功，共更新 " + count + " 条记录");
       }
 
       public Response updateWhere(String collection, String field, Object value, Object updateData) {
           if (collection == null || field == null || value == null || updateData == null) {
               return Response.fail("参数不能为空");
           }
-          WalWriter wal = getWal();
           Collection_ col = getCollection(collection);
           if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
           Set<String> keysToUpdate;
@@ -290,11 +361,17 @@ public class Database {
           if (keysToUpdate.isEmpty()) {
               return Response.fail("没有匹配的记录");
           }
-          for (String key : keysToUpdate) {
-              if (wal != null) wal.logUpdate(collection, key, updateData);
-              col.update(key, updateData);
+          try {
+              WalWriter wal = getWal();
+              for (String key : keysToUpdate) {
+                  if (wal != null) wal.logUpdate(collection, key, updateData);
+                  col.update(key, updateData);
+              }
+              markDirty();
+              return Response.ok("批量更新成功，共更新 " + keysToUpdate.size() + " 条记录");
+          } catch (IOException e) {
+              return Response.fail("WAL 写入失败，批量操作已取消: " + e.getMessage());
           }
-          return Response.ok("批量更新成功，共更新 " + keysToUpdate.size() + " 条记录");
       }
 
       public Response createIndex(String collection, String field) {
@@ -327,22 +404,24 @@ public class Database {
 
     public Response save() {
         if (currentDatabase == null) return Response.fail("请先选择数据库");
+        return saveDatabase(currentDatabase);
+    }
+
+    private Response saveDatabase(String dbName) {
         try {
-            Path dbPath = Paths.get(DATA_DIR, currentDatabase + DB_EXTENSION);
-            // 写入快照
+            Path dbPath = Paths.get(DATA_DIR, dbName + DB_EXTENSION);
             try (ObjectOutputStream oos = new ObjectOutputStream(
                     new FileOutputStream(dbPath.toFile()))) {
-                oos.writeObject(databases.get(currentDatabase));
+                oos.writeObject(databases.get(dbName));
             }
-            // WAL checkpoint + truncate
-            WalWriter wal = getWal();
+            WalWriter wal = walWriters.get(dbName);
             if (wal != null) {
                 wal.checkpoint();
                 wal.truncate();
             }
-            // Rotate 检测
+            dirtyDatabases.remove(dbName);
             if (compressionService.needRotate(dbPath)) {
-                int gen = nextGeneration(currentDatabase);
+                int gen = nextGeneration(dbName);
                 Path rotated = compressionService.rotate(dbPath, gen);
                 compressionService.compressAsync(rotated);
                 return Response.ok("数据已保存，文件已旋转 (gen=" + gen + ")，后台压缩中");
@@ -351,6 +430,10 @@ public class Database {
         } catch (IOException e) {
             return Response.fail("保存失败: " + e.getMessage());
         }
+    }
+
+    public Set<String> listDirtyDatabases() {
+        return new HashSet<>(dirtyDatabases);
     }
 
     @SuppressWarnings("unchecked")
@@ -375,10 +458,38 @@ public class Database {
             if (wal != null) {
                 replayWal(currentDatabase);
             }
+            dirtyDatabases.remove(currentDatabase);
             return Response.ok("数据已从 " + dbPath + " 加载 (含WAL回放)");
         } catch (IOException | ClassNotFoundException e) {
             return Response.fail("加载失败: " + e.getMessage());
         }
+    }
+
+    public Response autoLoadDatabases() {
+        int loaded = 0;
+        int recovered = 0;
+        File dataDir = new File(DATA_DIR);
+        File[] files = dataDir.listFiles((dir, name) -> name.endsWith(DB_EXTENSION));
+        if (files == null) return Response.ok("未发现已保存的数据库");
+        for (File f : files) {
+            String dbName = f.getName().substring(0, f.getName().length() - DB_EXTENSION.length());
+            if (!databases.containsKey(dbName)) {
+                databases.put(dbName, new ConcurrentHashMap<>());
+            }
+            String prev = currentDatabase;
+            currentDatabase = dbName;
+            Response resp = load(dbName);
+            if (resp.isSuccess()) {
+                loaded++;
+                if (resp.getMessage() != null && resp.getMessage().contains("WAL回放")) {
+                    recovered++;
+                }
+            } else {
+                LOG.warning("加载数据库 '" + dbName + "' 失败: " + resp.getMessage());
+            }
+            currentDatabase = prev;
+        }
+        return Response.ok("自动恢复完成: 加载 " + loaded + " 个数据库，WAL回放 " + recovered + " 个");
     }
 
     private void replayWal(String dbName) {
@@ -444,16 +555,37 @@ public class Database {
             dbSizes.put(entry.getKey(), collectionCount);
         }
         status.put("databases", dbSizes);
+        status.put("dirtyDatabases", new HashSet<>(dirtyDatabases));
+        status.put("autoSaveIntervalMs", AUTO_SAVE_INTERVAL_MS);
         status.put("rotateThreshold", CompressionService.getRotateThreshold() + " bytes");
         status.put("compressionPoolSize", compressionService.toString());
         return status;
     }
 
     public void shutdown() {
+        LOG.info("开始关闭数据库引擎...");
+        // 保存脏数据
+        for (String db : dirtyDatabases) {
+            LOG.info("自动保存脏数据: " + db);
+            saveDatabase(db);
+        }
+        dirtyDatabases.clear();
+        // 关闭定时器
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(3, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        // 关闭 WAL
         for (WalWriter ww : walWriters.values()) {
             ww.close();
         }
         walWriters.clear();
         compressionService.shutdown();
+        LOG.info("数据库引擎已安全关闭");
     }
 }
