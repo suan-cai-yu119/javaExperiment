@@ -89,15 +89,10 @@ public class ConsoleUI {
              case "UPDATE", "UPD" -> handleUpdate(args);
              case "SCAN", "SC" -> handleScan(args);
              
-              // 批量操作
-              case "BATCH", "B" -> handleBatch(args);
+               // 批量操作
+               case "BATCH", "B" -> handleBatch(args);
 
-               // 索引
-               case "CREATE" -> handleCreate(args);
-               case "DROP" -> handleDrop(args);
-               case "LIST" -> handleList(args);
-
-               // 持久化
+                // 持久化
                case "SAVE", "SV" -> handleSave(args);
                case "LOAD", "LD" -> handleLoad(args);
              
