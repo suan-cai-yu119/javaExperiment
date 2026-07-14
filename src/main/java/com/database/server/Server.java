@@ -1,7 +1,8 @@
  package com.database.server;
  
- import com.database.common.Protocol;
- import com.database.core.Database;
+import com.database.common.Protocol;
+import com.database.common.Response;
+import com.database.core.Database;
  
  import java.io.IOException;
  import java.net.ServerSocket;
@@ -55,13 +56,27 @@
          System.out.println("║    正在启动服务器...                      ║");
          System.out.println("╚═══════════════════════════════════════════╝");
          
-         try (ServerSocket serverSocket = new ServerSocket(port)) {
-             System.out.println("✓ 服务器已启动，监听端口: " + port);
-             System.out.println("✓ 支持最大客户端连接数: " + Protocol.MAX_CONNECTIONS);
-             System.out.println("✓ 等待客户端连接...\n");
-             
-             // 关闭钩子，确保优雅关闭
-             Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
+          try (ServerSocket serverSocket = new ServerSocket(port)) {
+              System.out.println("✓ 服务器已启动，监听端口: " + port);
+              System.out.println("✓ 支持最大客户端连接数: " + Protocol.MAX_CONNECTIONS);
+              
+              // 自动恢复数据（扫描 data/ 目录，加载所有数据库 + WAL回放）
+               System.out.println("✓ 正在自动恢复持久化数据...");
+               Response recoveryResp = database.autoLoadDatabases();
+               System.out.println("  " + recoveryResp.getMessage());
+               
+               // 启动 HTTP RESTful API 服务器
+               try {
+                   HttpApiServer httpApi = new HttpApiServer(database);
+                   httpApi.start();
+               } catch (IOException e) {
+                   System.err.println("? HTTP API 服务器启动失败: " + e.getMessage());
+               }
+               
+               System.out.println("✓ 等待客户端连接...\n");
+              
+              // 关闭钩子，确保优雅关闭
+              Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
              
              while (running) {
                  try {

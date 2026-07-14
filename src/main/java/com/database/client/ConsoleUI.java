@@ -58,11 +58,11 @@ public class ConsoleUI {
         return "\nmini-db> ";
     }
      
-     /**
-      * 解析并执行用户输入
-      * 体现了：反射（命令分发）、注解处理的思路
-      */
-      private void processInput(String input) {
+      /**
+       * 解析并执行用户输入
+       * 体现了：反射（命令分发）、注解处理的思路
+       */
+       public void processInput(String input) {
           String[] parts = parseInput(input);
           if (parts.length == 0) return;
           
@@ -92,9 +92,14 @@ public class ConsoleUI {
               // 批量操作
               case "BATCH", "B" -> handleBatch(args);
 
-              // 持久化
-              case "SAVE", "SV" -> handleSave(args);
-              case "LOAD", "LD" -> handleLoad(args);
+               // 索引
+               case "CREATE" -> handleCreate(args);
+               case "DROP" -> handleDrop(args);
+               case "LIST" -> handleList(args);
+
+               // 持久化
+               case "SAVE", "SV" -> handleSave(args);
+               case "LOAD", "LD" -> handleLoad(args);
              
               // 系统
               case "HELP", "H", "?" -> printHelp();
@@ -107,43 +112,61 @@ public class ConsoleUI {
          }
      }
      
-      private void handleCreate(String[] args) {
-          if (args.length < 2) {
-              System.out.println("✗ 用法: CREATE DATABASE|COLLECTION|TABLE <name>");
-              return;
-          }
-          String type = args[0].toUpperCase();
-          String name = args[1];
-          Response resp;
-          if ("DATABASE".equals(type) || "DB".equals(type)) {
-              resp = client.sendCommand(CommandType.CREATE_DATABASE, name);
-          } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
-              resp = client.sendCommand(CommandType.CREATE_COLLECTION, name);
-          } else {
-              System.out.println("✗ 类型错误: " + type);
-              return;
-          }
-          printResponse(resp);
-      }
+       private void handleCreate(String[] args) {
+           if (args.length < 2) {
+               System.out.println("✗ 用法: CREATE DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
+               return;
+           }
+           String type = args[0].toUpperCase();
+           String name = args[1];
+           Response resp;
+           if ("DATABASE".equals(type) || "DB".equals(type)) {
+               resp = client.sendCommand(CommandType.CREATE_DATABASE, name);
+           } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
+               resp = client.sendCommand(CommandType.CREATE_COLLECTION, name);
+           } else if ("INDEX".equals(type) || "IDX".equals(type)) {
+               if (args.length < 3) {
+                   System.out.println("✗ 用法: CREATE INDEX <collection> <field>");
+                   return;
+               }
+               Request req = new Request(CommandType.CREATE_INDEX);
+               req.setCollectionName(name);
+               req.setKey(args[2]);
+               resp = client.sendRequest(req);
+           } else {
+               System.out.println("✗ 类型错误: " + type);
+               return;
+           }
+           printResponse(resp);
+       }
      
-      private void handleDrop(String[] args) {
-          if (args.length < 2) {
-              System.out.println("✗ 用法: DROP DATABASE|COLLECTION|TABLE <name>");
-              return;
-          }
-          String type = args[0].toUpperCase();
-          String name = args[1];
-          Response resp;
-          if ("DATABASE".equals(type) || "DB".equals(type)) {
-              resp = client.sendCommand(CommandType.DROP_DATABASE, name);
-          } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
-              resp = client.sendCommand(CommandType.DROP_COLLECTION, name);
-          } else {
-              System.out.println("✗ 类型错误: " + type);
-              return;
-          }
-          printResponse(resp);
-      }
+       private void handleDrop(String[] args) {
+           if (args.length < 2) {
+               System.out.println("✗ 用法: DROP DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
+               return;
+           }
+           String type = args[0].toUpperCase();
+           String name = args[1];
+           Response resp;
+           if ("DATABASE".equals(type) || "DB".equals(type)) {
+               resp = client.sendCommand(CommandType.DROP_DATABASE, name);
+           } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
+               resp = client.sendCommand(CommandType.DROP_COLLECTION, name);
+           } else if ("INDEX".equals(type) || "IDX".equals(type)) {
+               if (args.length < 3) {
+                   System.out.println("✗ 用法: DROP INDEX <collection> <field>");
+                   return;
+               }
+               Request req = new Request(CommandType.DROP_INDEX);
+               req.setCollectionName(name);
+               req.setKey(args[2]);
+               resp = client.sendRequest(req);
+           } else {
+               System.out.println("✗ 类型错误: " + type);
+               return;
+           }
+           printResponse(resp);
+       }
 
       private void handleList(String[] args) {
           if (args.length == 0) {
@@ -165,22 +188,42 @@ public class ConsoleUI {
                       }
                   }
               }
-          } else if ("COLLECTIONS".equals(type) || "COLS".equals(type) || "TABLES".equals(type) || "TBL".equals(type)) {
-              resp = client.sendCommand(CommandType.LIST_COLLECTIONS);
-              printResponse(resp);
-              if (resp.isSuccess() && resp.getData() instanceof Set<?> collections) {
-                  if (collections.isEmpty()) {
-                      System.out.println("  (当前数据库中没有集合，请使用 CREATE COLLECTION 创建)");
-                  } else {
-                      System.out.println("  集合列表:");
-                      for (Object col : collections) {
-                          System.out.println("    - " + col);
-                      }
-                  }
-              }
-          } else {
-              System.out.println("✗ 类型错误: " + type);
-          }
+           } else if ("COLLECTIONS".equals(type) || "COLS".equals(type) || "TABLES".equals(type) || "TBL".equals(type)) {
+               resp = client.sendCommand(CommandType.LIST_COLLECTIONS);
+               printResponse(resp);
+               if (resp.isSuccess() && resp.getData() instanceof Set<?> collections) {
+                   if (collections.isEmpty()) {
+                       System.out.println("  (当前数据库中没有集合，请使用 CREATE COLLECTION 创建)");
+                   } else {
+                       System.out.println("  集合列表:");
+                       for (Object col : collections) {
+                           System.out.println("    - " + col);
+                       }
+                   }
+               }
+           } else if ("INDEXES".equals(type) || "IDX".equals(type)) {
+               if (args.length < 2) {
+                   System.out.println("✗ 用法: LIST INDEXES <collection>");
+                   return;
+               }
+               String colName = args[1];
+               Request req = new Request(CommandType.LIST_INDEXES);
+               req.setCollectionName(colName);
+               resp = client.sendRequest(req);
+               printResponse(resp);
+               if (resp.isSuccess() && resp.getData() instanceof Set<?> indexes) {
+                   if (indexes.isEmpty()) {
+                       System.out.println("  (该集合没有索引)");
+                   } else {
+                       System.out.println("  索引列表:");
+                       for (Object idx : indexes) {
+                           System.out.println("    - " + idx);
+                       }
+                   }
+               }
+           } else {
+               System.out.println("✗ 类型错误: " + type);
+           }
       }
 
      private void handleUse(String[] args) {
@@ -635,11 +678,16 @@ public class ConsoleUI {
                   ║    BATCH UPDATE <c> <k1> f:v...      <k2>... 批量更新║
                   ║    UPDATE <c> WHERE f=v sf:sv...   条件批量更新    ║
                   ║                                                    ║
-                  ║  持久化:                                            ║
-                 ║    SAVE                      保存数据               ║
-                 ║    LOAD [dbname]             加载数据               ║
-                 ║                                                    ║
-                 ║  系统:                                              ║
+                   ║  索引:                                              ║
+                   ║    CREATE INDEX <col> <f>    创建索引（加速WHERE）    ║
+                   ║    DROP INDEX <col> <f>      删除索引                ║
+                   ║    LIST INDEXES <col>        查看索引列表            ║
+                   ║                                                    ║
+                   ║  持久化:                                            ║
+                  ║    SAVE                      保存数据               ║
+                  ║    LOAD [dbname]             加载数据               ║
+                  ║                                                    ║
+                  ║  系统:                                              ║
                  ║    HELP                      显示帮助               ║
                  ║    PING                      心跳检测               ║
                   ║    QUIT                      退出                   ║
@@ -683,14 +731,48 @@ public class ConsoleUI {
          return tokens.toArray(new String[0]);
      }
      
-     private Object parseValue(String s) {
-         // 尝试解析为整数
-         try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
-         // 尝试解析为浮点数
-         try { return Double.parseDouble(s); } catch (NumberFormatException ignored) {}
-         // 默认为字符串
-         return s;
-     }
+      private Object parseValue(String s) {
+          s = s.trim();
+          // 列表 [a,b,c]
+          if (s.startsWith("[") && s.endsWith("]")) {
+              String inner = s.substring(1, s.length() - 1).trim();
+              if (inner.isEmpty()) return new ArrayList<>();
+              List<Object> list = new ArrayList<>();
+              for (String item : inner.split(",")) {
+                  list.add(parseValue(item.trim()));
+              }
+              return list;
+          }
+          // 集合 (a,b,c)
+          if (s.startsWith("(") && s.endsWith(")")) {
+              String inner = s.substring(1, s.length() - 1).trim();
+              if (inner.isEmpty()) return new HashSet<>();
+              Set<Object> set = new LinkedHashSet<>();
+              for (String item : inner.split(",")) {
+                  set.add(parseValue(item.trim()));
+              }
+              return set;
+          }
+          // 嵌套对象 {k1:v1,k2:v2}
+          if (s.startsWith("{") && s.endsWith("}")) {
+              String inner = s.substring(1, s.length() - 1).trim();
+              if (inner.isEmpty()) return new LinkedHashMap<>();
+              Map<String, Object> map = new LinkedHashMap<>();
+              for (String pair : inner.split(",")) {
+                  int colon = pair.indexOf(':');
+                  if (colon > 0) {
+                      String k = pair.substring(0, colon).trim();
+                      String v = pair.substring(colon + 1).trim();
+                      if (!k.isEmpty()) map.put(k, parseValue(v));
+                  }
+              }
+              return map;
+          }
+          // 数字
+          try { return Integer.parseInt(s); } catch (NumberFormatException ignored) {}
+          try { return Double.parseDouble(s); } catch (NumberFormatException ignored) {}
+          return s;
+      }
      
       private String truncate(String s, int maxLen) {
           if (s == null) return "null";

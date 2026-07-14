@@ -24,9 +24,12 @@
      /** 消息分隔符 */
      public static final String DELIMITER = "\r\n";
      
-     /** 集群心跳间隔（毫秒） */
-     public static final long HEARTBEAT_INTERVAL = 3000;
-     
-     /** 节点超时时间（毫秒） */
-     public static final long NODE_TIMEOUT = 10000;
- }
+      /** 集群心跳间隔（毫秒） */
+      public static final long HEARTBEAT_INTERVAL = 3000;
+      
+      /** 节点超时时间（毫秒） */
+      public static final long NODE_TIMEOUT = 10000;
+
+      /** HTTP REST API 端口 */
+      public static final int HTTP_PORT = 8080;
+  }

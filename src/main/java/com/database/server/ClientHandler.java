@@ -175,11 +175,35 @@ import java.util.logging.Logger;
                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
                  return database.scan(listCol);
 
-             // 持久化
-             case SAVE:
-                 return database.save();
-             case LOAD:
-                 return database.load(request.getArgs().length > 0 ? request.getArgs()[0] : null);
+              // 索引
+              case CREATE_INDEX: {
+                  String ciCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  String ciField = request.getKey() != null ? request.getKey() :
+                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                  return database.createIndex(ciCol, ciField);
+              }
+              case DROP_INDEX: {
+                  String diCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  String diField = request.getKey() != null ? request.getKey() :
+                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                  return database.dropIndex(diCol, diField);
+              }
+              case LIST_INDEXES: {
+                  String liCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  return database.listIndexes(liCol);
+              }
+
+              // 持久化
+              case SAVE:
+                  return database.save();
+              case LOAD:
+                  return database.load(request.getArgs().length > 0 ? request.getArgs()[0] : null);
                  
              // 系统
              case PING:
@@ -215,9 +239,17 @@ import java.util.logging.Logger;
                  UPDATE <col> <key> <val>  更新值
                  SCAN <col>                扫描所有键值对
                  
-                 -- 持久化 --
-                 SAVE                     保存数据
-                 LOAD [dbname]            加载数据
+                  -- 索引 --
+                  CREATE INDEX <col> <f>   为字段创建索引
+                  DROP INDEX <col> <f>     删除索引
+                  LIST INDEXES <col>       查看索引列表
+
+                  -- 缓存 --
+                  CLEAR CACHE <col>        清除查询缓存
+
+                  -- 持久化 --
+                  SAVE                     保存数据
+                  LOAD [dbname]            加载数据
                  
                  -- 系统 --
                  HELP                     显示帮助
