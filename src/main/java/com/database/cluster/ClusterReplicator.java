@@ -82,9 +82,21 @@ public class ClusterReplicator {
                     if (resp instanceof ClusterMessage msg && msg.getType() == ClusterMessage.Type.REGISTERED) {
                         LOG.info("已注册到主节点 " + masterHost + ":" + masterPort);
                         // 解析全量节点列表，更新本地集群视图
-                        List<ClusterNode> nodes = msg.getDataAs();
-                        for (ClusterNode n : nodes) {
-                            clusterManager.addNode(n);
+                        Object rawData = msg.getData();
+                        LOG.info("REGISTERED data type=" + rawData.getClass().getName()
+                                + ", isList=" + (rawData instanceof List)
+                                + ", isClusterNode=" + (rawData instanceof ClusterNode));
+                        if (rawData instanceof List<?> nodeList) {
+                            LOG.info("REGISTERED list size=" + nodeList.size());
+                            for (Object n : nodeList) {
+                                LOG.info("  node: " + n + " class=" + n.getClass().getName());
+                                if (n instanceof ClusterNode cn) {
+                                    clusterManager.addNode(cn);
+                                }
+                            }
+                        } else if (rawData instanceof ClusterNode cn) {
+                            LOG.warning("主节点返回的是单节点(旧代码)，只添加一个节点");
+                            clusterManager.addNode(cn);
                         }
                     }
 
@@ -111,7 +123,10 @@ public class ClusterReplicator {
                     }
                 } catch (Exception e) {
                     if (running) {
-                        LOG.warning("与主节点连接断开，5秒后重试: " + e.getMessage());
+                        LOG.warning("与主节点连接断开，5秒后重试: " + e.getClass().getName() + ": " + e.getMessage());
+                        java.io.StringWriter sw = new java.io.StringWriter();
+                        e.printStackTrace(new java.io.PrintWriter(sw));
+                        LOG.warning("完整异常堆栈:\n" + sw);
                         if (heartbeater != null) {
                             heartbeater.shutdownNow();
                             heartbeater = null;
@@ -133,11 +148,18 @@ public class ClusterReplicator {
                 clusterManager.getSelf().updateHeartbeat();
             }
             case NODE_LIST -> {
-                List<ClusterNode> nodes = msg.getDataAs();
-                for (ClusterNode n : nodes) {
-                    clusterManager.addNode(n);
+                Object rawData = msg.getData();
+                LOG.info("收到 NODE_LIST: type=" + rawData.getClass().getName()
+                        + ", isList=" + (rawData instanceof List));
+                if (rawData instanceof List<?> nodeList) {
+                    LOG.info("NODE_LIST size=" + nodeList.size());
+                    for (Object n : nodeList) {
+                        if (n instanceof ClusterNode cn) {
+                            clusterManager.addNode(cn);
+                        }
+                    }
                 }
-                LOG.fine("已同步节点列表，当前 " + nodes.size() + " 个节点");
+                LOG.info("同步后本地节点数: " + clusterManager.getAllNodes().size());
             }
         }
     }
@@ -206,6 +228,7 @@ public class ClusterReplicator {
 
         @Override
         public void run() {
+            LOG.info("从节点 TCP 连接已建立: " + socket.getRemoteSocketAddress());
             ScheduledExecutorService heartbeater = null;
             try {
                 ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
@@ -215,13 +238,21 @@ public class ClusterReplicator {
                     clusterManager.addNode(slaveNode);
                     oos = new ObjectOutputStream(socket.getOutputStream());
                     // 回复全量节点列表，让新节点知道集群中所有节点
+                    List<ClusterNode> allNodes = clusterManager.getAllNodes();
+                    LOG.info("REGISTERED data type=" + allNodes.getClass().getName()
+                            + ", size=" + allNodes.size()
+                            + ", elements=" + allNodes.stream().map(ClusterNode::getNodeId).toList());
                     oos.writeObject(new ClusterMessage(ClusterMessage.Type.REGISTERED,
-                            clusterManager.getAllNodes(), clusterManager.getCurrentNodeId()));
+                            allNodes, clusterManager.getCurrentNodeId()));
                     oos.flush();
                     LOG.info("从节点已注册: " + slaveNode.getNodeId());
                     // 广播 NODE_LIST 给其他已连接的从节点，让它们知道有新节点加入
+                    List<ClusterNode> broadcastNodes = clusterManager.getAllNodes();
+                    LOG.info("广播 NODE_LIST: type=" + broadcastNodes.getClass().getName()
+                            + ", size=" + broadcastNodes.size()
+                            + ", nodes=" + broadcastNodes.stream().map(ClusterNode::getNodeId).toList());
                     ClusterMessage nodeListMsg = new ClusterMessage(ClusterMessage.Type.NODE_LIST,
-                            clusterManager.getAllNodes(), clusterManager.getCurrentNodeId());
+                            broadcastNodes, clusterManager.getCurrentNodeId());
                     for (SlaveConnection sc : slaves) {
                         if (sc != this) sc.send(nodeListMsg);
                     }
@@ -251,7 +282,9 @@ public class ClusterReplicator {
                     }
                 }
             } catch (Exception e) {
-                LOG.warning("从节点连接异常: " + e.getMessage());
+                java.io.StringWriter sw = new java.io.StringWriter();
+                e.printStackTrace(new java.io.PrintWriter(sw));
+                LOG.warning("从节点连接异常: " + e.getClass().getName() + ": " + e.getMessage() + "\n" + sw);
             } finally {
                 active = false;
                 slaves.remove(this);
@@ -259,8 +292,11 @@ public class ClusterReplicator {
                 close();
                 LOG.info("从节点已断开: " + socket.getRemoteSocketAddress());
                 // 告知其他从节点节点列表已变化
+                List<ClusterNode> remaining = clusterManager.getAllNodes();
+                LOG.info("断开广播 NODE_LIST: size=" + remaining.size()
+                        + ", nodes=" + remaining.stream().map(ClusterNode::getNodeId).toList());
                 ClusterMessage nodeListMsg = new ClusterMessage(ClusterMessage.Type.NODE_LIST,
-                        clusterManager.getAllNodes(), clusterManager.getCurrentNodeId());
+                        remaining, clusterManager.getCurrentNodeId());
                 for (SlaveConnection sc : slaves) {
                     sc.send(nodeListMsg);
                 }
