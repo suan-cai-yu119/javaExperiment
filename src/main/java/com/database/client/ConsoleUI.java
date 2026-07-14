@@ -75,36 +75,39 @@ public class ConsoleUI {
           String command = first.toUpperCase();
           String[] args = Arrays.copyOfRange(parts, 1, parts.length);
           
-          switch (command) {
-             // 数据库操作
-             case "CREATE", "CR" -> handleCreate(args);
-             case "DROP", "DR" -> handleDrop(args);
-             case "LIST", "LS" -> handleList(args);
-             case "USE", "US" -> handleUse(args);
-             
-             // 键值操作
-             case "PUT", "P" -> handlePut(args);
-             case "GET", "G" -> handleGet(args);
-             case "DELETE", "DEL" -> handleDelete(args);
-             case "UPDATE", "UPD" -> handleUpdate(args);
-             case "SCAN", "SC" -> handleScan(args);
-             
-               // 批量操作
-               case "BATCH", "B" -> handleBatch(args);
+           switch (command) {
+              // 数据库操作
+              case "CREATE", "CR" -> handleCreate(args);
+              case "DROP", "DR" -> handleDrop(args);
+              case "LIST", "LS" -> handleList(args);
+              case "USE", "US" -> handleUse(args);
+              
+              // 键值操作
+              case "PUT", "P" -> handlePut(args);
+              case "GET", "G" -> handleGet(args);
+              case "DELETE", "DEL" -> handleDelete(args);
+              case "UPDATE", "UPD" -> handleUpdate(args);
+              case "SCAN", "SC" -> handleScan(args);
+              
+                // 批量操作
+                case "BATCH", "B" -> handleBatch(args);
 
-                // 持久化
-               case "SAVE", "SV" -> handleSave(args);
-               case "LOAD", "LD" -> handleLoad(args);
-             
-              // 系统
-              case "HELP", "H", "?" -> printHelp();
-              case "HISTORY" -> handleHistory();
-              case "PING" -> handlePing();
-              case "QUIT", "Q", "EXIT" -> handleQuit();
-              case "CLEAR", "CLS" -> clearScreen();
-             
-             default -> System.out.println("✗ 未知命令，输入 HELP 查看帮助");
-         }
+                 // 持久化
+                case "SAVE", "SV" -> handleSave(args);
+                case "LOAD", "LD" -> handleLoad(args);
+              
+               // 集群
+               case "CLUSTER" -> handleCluster(args);
+
+               // 系统
+               case "HELP", "H", "?" -> printHelp();
+               case "HISTORY" -> handleHistory();
+               case "PING" -> handlePing();
+               case "QUIT", "Q", "EXIT" -> handleQuit();
+               case "CLEAR" -> clearScreen();
+              
+              default -> System.out.println("✗ 未知命令，输入 HELP 查看帮助");
+          }
      }
      
        private void handleCreate(String[] args) {
@@ -592,14 +595,54 @@ public class ConsoleUI {
          printResponse(client.sendCommand(CommandType.LOAD, args));
      }
      
-     private void handlePing() {
-         long start = System.nanoTime();
-         Response resp = client.sendCommand(CommandType.PING);
-         long time = (System.nanoTime() - start) / 1_000_000;
-         if (resp.isSuccess()) {
-             System.out.println("✓ " + resp.getMessage() + " (延迟: " + time + "ms)");
-         }
-     }
+      private void handleCluster(String[] args) {
+          if (args.length == 0) {
+              System.out.println("✗ 用法: CLUSTER STATUS|JOIN <host> [port]|LEAVE");
+              return;
+          }
+          String sub = args[0].toUpperCase();
+          switch (sub) {
+              case "STATUS" -> {
+                  Response resp = client.sendCommand(CommandType.CLUSTER_STATUS);
+                  printResponse(resp);
+                  if (resp.isSuccess() && resp.getData() instanceof Map<?, ?> status) {
+                      System.out.println("  集群状态:");
+                      for (Map.Entry<?, ?> e : status.entrySet()) {
+                          if (!"nodes".equals(e.getKey())) {
+                              System.out.println("    " + e.getKey() + ": " + e.getValue());
+                          }
+                      }
+                      if (status.get("nodes") instanceof List<?> nodes) {
+                          System.out.println("  节点列表:");
+                          for (Object n : nodes) {
+                              System.out.println("    - " + n);
+                          }
+                      }
+                  }
+              }
+              case "JOIN" -> {
+                  if (args.length < 2) {
+                      System.out.println("✗ 用法: CLUSTER JOIN <host> [port]");
+                      return;
+                  }
+                  String host = args[1];
+                  int port = args.length > 2 ? Integer.parseInt(args[2]) : Protocol.DEFAULT_PORT;
+                  printResponse(client.sendCommand(CommandType.CLUSTER_JOIN, host, String.valueOf(port)));
+              }
+              case "LEAVE" ->
+                  printResponse(client.sendCommand(CommandType.CLUSTER_LEAVE));
+              default -> System.out.println("✗ 未知集群命令: " + sub + "，可用: STATUS, JOIN, LEAVE");
+          }
+      }
+
+      private void handlePing() {
+          long start = System.nanoTime();
+          Response resp = client.sendCommand(CommandType.PING);
+          long time = (System.nanoTime() - start) / 1_000_000;
+          if (resp.isSuccess()) {
+              System.out.println("✓ " + resp.getMessage() + " (延迟: " + time + "ms)");
+          }
+      }
 
       private void handleQuit() {
           try {
@@ -679,10 +722,15 @@ public class ConsoleUI {
                    ║    LIST INDEXES <col>        查看索引列表            ║
                    ║                                                    ║
                    ║  持久化:                                            ║
-                  ║    SAVE                      保存数据               ║
-                  ║    LOAD [dbname]             加载数据               ║
-                  ║                                                    ║
-                  ║  系统:                                              ║
+                   ║    SAVE                      保存数据               ║
+                   ║    LOAD [dbname]             加载数据               ║
+                   ║                                                    ║
+                   ║  集群:                                              ║
+                   ║    CLUSTER STATUS             集群状态               ║
+                   ║    CLUSTER JOIN <h> [p]       加入集群               ║
+                   ║    CLUSTER LEAVE              离开集群               ║
+                   ║                                                    ║
+                   ║  系统:                                              ║
                  ║    HELP                      显示帮助               ║
                  ║    PING                      心跳检测               ║
                   ║    QUIT                      退出                   ║

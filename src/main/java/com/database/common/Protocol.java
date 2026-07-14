@@ -32,4 +32,7 @@
 
       /** HTTP REST API 端口 */
       public static final int HTTP_PORT = 8080;
+
+      /** 集群内部通信端口偏移量（clientPort + OFFSET） */
+      public static final int CLUSTER_PORT_OFFSET = 10000;
   }

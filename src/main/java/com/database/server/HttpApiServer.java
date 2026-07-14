@@ -1,5 +1,6 @@
 package com.database.server;
 
+import com.database.cluster.ClusterManager;
 import com.database.common.Protocol;
 import com.database.common.Response;
 import com.database.core.Database;
@@ -22,18 +23,20 @@ import java.util.logging.Logger;
 public class HttpApiServer {
     private static final Logger LOG = Logger.getLogger(HttpApiServer.class.getName());
     private final Database database;
+    private final ClusterManager clusterManager;
     private final Gson gson;
     private final int port;
     private HttpServer server;
 
-    public HttpApiServer(Database database, int port) {
+    public HttpApiServer(Database database, ClusterManager clusterManager, int port) {
         this.database = database;
+        this.clusterManager = clusterManager;
         this.port = port;
         this.gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     }
 
-    public HttpApiServer(Database database) {
-        this(database, Protocol.HTTP_PORT);
+    public HttpApiServer(Database database, ClusterManager clusterManager) {
+        this(database, clusterManager, Protocol.HTTP_PORT);
     }
 
     public void start() throws IOException {
@@ -71,6 +74,7 @@ public class HttpApiServer {
             register("POST", "/api/load", this::handleLoad);
             register("POST", "/api/shutdown", this::handleShutdown);
             register("GET", "/api/status", this::handleStatus);
+            register("GET", "/api/cluster/status", this::handleClusterStatus);
             register("GET", "/api/help", this::handleHelp);
         }
 
@@ -267,6 +271,13 @@ public class HttpApiServer {
             return gson.toJson(Map.of("success", true, "message", "状态信息", "data", status));
         }
 
+        private String handleClusterStatus(Map<String, String> params, String body) {
+            if (clusterManager == null || !clusterManager.isClusterEnabled()) {
+                return gson.toJson(Map.of("success", false, "message", "集群未启用"));
+            }
+            return gson.toJson(Map.of("success", true, "message", "集群状态", "data", clusterManager.getClusterStatus()));
+        }
+
         private String handleHelp(Map<String, String> params, String body) {
             Map<String, String> endpoints = new LinkedHashMap<>();
             endpoints.put("GET /api/databases", "列出所有数据库");
@@ -286,6 +297,7 @@ public class HttpApiServer {
             endpoints.put("POST /api/load", "加载数据 (body: {\"name\":\"...\"})");
             endpoints.put("POST /api/shutdown", "关闭服务器");
             endpoints.put("GET /api/status", "服务器状态");
+            endpoints.put("GET /api/cluster/status", "集群状态（集群模式下可用）");
             return gson.toJson(Map.of("success", true, "message", "API 路由列表", "data", endpoints));
         }
 

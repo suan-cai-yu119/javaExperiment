@@ -24,6 +24,7 @@ public class MainFrame extends JFrame {
     private final JButton connectBtn = new JButton("连接");
     private final JButton disconnectBtn = new JButton("断开");
     private final JLabel statusLabel = new JLabel("○ 未连接");
+    private final JLabel clusterLabel = new JLabel("");
 
     // 导航树
     private final DatabaseTree databaseTree;
@@ -82,6 +83,8 @@ public class MainFrame extends JFrame {
         bar.add(disconnectBtn);
         bar.addSeparator();
         bar.add(statusLabel);
+        bar.add(Box.createHorizontalStrut(8));
+        bar.add(clusterLabel);
         return bar;
     }
 
@@ -205,8 +208,32 @@ public class MainFrame extends JFrame {
             protected void done() {
                 boolean ok = client != null && client.isConnected();
                 setConnectedState(ok);
-                if (ok) statusLabel.setText("● 已连接");
-                else statusLabel.setText("○ 连接失败");
+                if (ok) {
+                    statusLabel.setText("● 已连接");
+                    queryClusterStatus();
+                } else {
+                    statusLabel.setText("○ 连接失败");
+                }
+            }
+        }.execute();
+    }
+
+    private void queryClusterStatus() {
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                try {
+                    Response resp = client.sendCommand(CommandType.CLUSTER_STATUS);
+                    if (resp.isSuccess() && resp.getData() instanceof Map<?, ?> status) {
+                        Object role = status.get("currentRole");
+                        Object enabled = status.get("clusterEnabled");
+                        if (Boolean.TRUE.equals(enabled) && role != null) {
+                            final String text = "? 集群: " + role;
+                            SwingUtilities.invokeLater(() -> clusterLabel.setText(text));
+                        }
+                    }
+                } catch (Exception ignored) {}
+                return null;
             }
         }.execute();
     }
@@ -219,6 +246,7 @@ public class MainFrame extends JFrame {
         databaseTree.clearAll();
         tableModel.clear();
         currentDb = null;
+        clusterLabel.setText("");
         setConnectedState(false);
         statusLabel.setText("○ 未连接");
         log("? 已断开连接");

@@ -1,14 +1,18 @@
  package com.database.server;
  
- import com.database.common.*;
- import com.database.core.Database;
- 
+import com.database.cluster.ClusterManager;
+import com.database.cluster.ClusterReplicator;
+import com.database.common.*;
+import com.database.core.Database;
+
 import java.io.*;
 import java.net.Socket;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static com.database.cluster.ClusterReplicator.WalEntry;
  
  /**
   * 客户端处理器 - 每个客户端连接对应一个线程
@@ -17,17 +21,19 @@ import java.util.logging.Logger;
  public class ClientHandler implements Runnable {
      private static final Logger LOGGER = Logger.getLogger(ClientHandler.class.getName());
      
-     private final Socket socket;
-     private final Database database;
-     private final int clientId;
-     private volatile boolean running;
-     
-     public ClientHandler(Socket socket, Database database, int clientId) {
-         this.socket = socket;
-         this.database = database;
-         this.clientId = clientId;
-         this.running = true;
-     }
+      private final Socket socket;
+      private final Database database;
+      private final int clientId;
+      private final ClusterManager clusterManager;
+      private volatile boolean running;
+      
+      public ClientHandler(Socket socket, Database database, int clientId, ClusterManager clusterManager) {
+          this.socket = socket;
+          this.database = database;
+          this.clientId = clientId;
+          this.clusterManager = clusterManager;
+          this.running = true;
+      }
 
      @Override
      public void run() {
@@ -77,145 +83,208 @@ import java.util.logging.Logger;
          LOGGER.info("客户端 #" + clientId + " 已断开连接");
      }
      
-     /**
-      * 处理客户端请求 - 使用反射和策略模式思想
-      */
-     private Response processRequest(Request request) {
-         switch (request.getCommand()) {
-             // 数据库操作
-             case CREATE_DATABASE:
-                 Response createResp = database.createDatabase(request.getArgs()[0]);
-                 return createResp;
-             case DROP_DATABASE:
-                 return database.dropDatabase(request.getArgs()[0]);
-             case LIST_DATABASES:
-                 Set<String> dbs = database.listDatabases();
-                 return Response.ok("数据库列表", dbs);
-             case USE_DATABASE:
-                 return database.useDatabase(request.getArgs()[0]);
-                 
-             // 集合操作
-             case CREATE_COLLECTION:
-                 return database.createCollection(request.getArgs()[0]);
-             case DROP_COLLECTION:
-                 return database.dropCollection(request.getArgs()[0]);
-             case LIST_COLLECTIONS:
-                 return Response.ok("集合列表", database.listCollections());
+      private Response checkWriteAllowed() {
+          if (clusterManager != null && clusterManager.isClusterEnabled() && !clusterManager.isMaster()) {
+              return Response.fail("当前节点为 SLAVE（只读），无法执行写操作");
+          }
+          return null;
+      }
 
-             // 键值操作
-             case PUT:
-                 // 优先使用字段，如果没有则从 args 获取
-                 String putCol = request.getCollectionName() != null ?
-                         request.getCollectionName() :
-                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 String putKey = request.getKey() != null ?
-                         request.getKey() :
-                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                 Object putVal = request.getValue();
-                 return database.put(putCol, putKey, putVal);
+      private void broadcastWrite(String op, String collection, String key, Object value) {
+          if (clusterManager != null && clusterManager.isClusterEnabled()) {
+              clusterManager.broadcastWal(new WalEntry(op, collection, key, value));
+          }
+      }
 
-             case GET:
-                 String getCol = request.getCollectionName() != null ?
-                         request.getCollectionName() :
-                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 String getKey = request.getKey() != null ?
-                         request.getKey() :
-                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                 return database.get(getCol, getKey);
+      /**
+       * 处理客户端请求 - 使用反射和策略模式思想
+       */
+      private Response processRequest(Request request) {
+          // 集群命令处理
+          if (clusterManager != null && clusterManager.isClusterEnabled()) {
+              switch (request.getCommand()) {
+                  case CLUSTER_STATUS -> {
+                      return Response.ok("集群状态", clusterManager.getClusterStatus());
+                  }
+                  case CLUSTER_JOIN -> {
+                      String coordHost = request.getArgs().length > 0 ? request.getArgs()[0] : "127.0.0.1";
+                      int coordPort = request.getArgs().length > 1 ?
+                              Integer.parseInt(request.getArgs()[1]) : Protocol.DEFAULT_PORT;
+                      clusterManager.joinCluster(coordHost, coordPort);
+                      return Response.ok("已加入集群");
+                  }
+                  case CLUSTER_LEAVE -> {
+                      clusterManager.leaveCluster();
+                      return Response.ok("已离开集群");
+                  }
+              }
+          }
 
-              case DELETE:
-                  String delCol = request.getCollectionName() != null ?
+          switch (request.getCommand()) {
+              // 数据库操作
+              case CREATE_DATABASE:
+                  Response createResp = database.createDatabase(request.getArgs()[0]);
+                  return createResp;
+              case DROP_DATABASE:
+                  return database.dropDatabase(request.getArgs()[0]);
+              case LIST_DATABASES:
+                  Set<String> dbs = database.listDatabases();
+                  return Response.ok("数据库列表", dbs);
+              case USE_DATABASE:
+                  return database.useDatabase(request.getArgs()[0]);
+                  
+              // 集合操作
+              case CREATE_COLLECTION:
+                  return database.createCollection(request.getArgs()[0]);
+              case DROP_COLLECTION:
+                  return database.dropCollection(request.getArgs()[0]);
+              case LIST_COLLECTIONS:
+                  return Response.ok("集合列表", database.listCollections());
+
+              // 键值操作（写操作需检查 SLAVE 权限并广播 WAL）
+              case PUT: {
+                  Response deny = checkWriteAllowed();
+                  if (deny != null) return deny;
+                  String putCol = request.getCollectionName() != null ?
                           request.getCollectionName() :
                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  if (request.getFilterField() != null) {
-                      return database.deleteWhere(delCol, request.getFilterField(), request.getFilterValue());
-                  }
-                  String delKey = request.getKey() != null ?
+                  String putKey = request.getKey() != null ?
                           request.getKey() :
                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                  return database.delete(delCol, delKey);
+                  Object putVal = request.getValue();
+                  Response putResp = database.put(putCol, putKey, putVal);
+                  if (putResp.isSuccess()) broadcastWrite("PUT", putCol, putKey, putVal);
+                  return putResp;
+              }
 
-              case UPDATE:
-                  String updCol = request.getCollectionName() != null ?
+              case GET:
+                  String getCol = request.getCollectionName() != null ?
                           request.getCollectionName() :
                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  if (request.getFilterField() != null) {
-                      return database.updateWhere(updCol, request.getFilterField(),
-                              request.getFilterValue(), request.getValue());
-                  }
-                  String updKey = request.getKey() != null ?
+                  String getKey = request.getKey() != null ?
                           request.getKey() :
                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                  Object updVal = request.getValue();
-                  return database.update(updCol, updKey, updVal);
+                  return database.get(getCol, getKey);
 
-              case BATCH_PUT: {
-                  String bpCol = request.getCollectionName() != null ?
+               case DELETE: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   String delCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   if (request.getFilterField() != null) {
+                       Response delResp = database.deleteWhere(delCol, request.getFilterField(), request.getFilterValue());
+                       if (delResp.isSuccess()) broadcastWrite("DEL_WHERE", delCol, request.getFilterField(), request.getFilterValue());
+                       return delResp;
+                   }
+                   String delKey = request.getKey() != null ?
+                           request.getKey() :
+                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                   Response delResp = database.delete(delCol, delKey);
+                   if (delResp.isSuccess()) broadcastWrite("DEL", delCol, delKey, null);
+                   return delResp;
+               }
+
+               case UPDATE: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   String updCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   if (request.getFilterField() != null) {
+                       Response updResp = database.updateWhere(updCol, request.getFilterField(),
+                               request.getFilterValue(), request.getValue());
+                       if (updResp.isSuccess()) broadcastWrite("UPD_WHERE", updCol, request.getFilterField(), request.getFilterValue());
+                       return updResp;
+                   }
+                   String updKey = request.getKey() != null ?
+                           request.getKey() :
+                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                   Object updVal = request.getValue();
+                   Response updResp = database.update(updCol, updKey, updVal);
+                   if (updResp.isSuccess()) broadcastWrite("UPD", updCol, updKey, updVal);
+                   return updResp;
+               }
+
+               case BATCH_PUT: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   String bpCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   Response bpResp = database.batchPut(bpCol, request.getBatchData());
+                   if (bpResp.isSuccess()) broadcastWrite("BATCH_PUT", bpCol, null, request.getBatchData());
+                   return bpResp;
+               }
+
+               case BATCH_UPDATE: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   String buCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   Response buResp = database.batchUpdate(buCol, request.getBatchData());
+                   if (buResp.isSuccess()) broadcastWrite("BATCH_UPD", buCol, null, request.getBatchData());
+                   return buResp;
+               }
+
+               case SCAN:
+                  String scanCol = request.getCollectionName() != null ?
                           request.getCollectionName() :
                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  return database.batchPut(bpCol, request.getBatchData());
-              }
+                  return database.scan(scanCol);
 
-              case BATCH_UPDATE: {
-                  String buCol = request.getCollectionName() != null ?
+              case LIST_KEYS:
+                  String listCol = request.getCollectionName() != null ?
                           request.getCollectionName() :
                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  return database.batchUpdate(buCol, request.getBatchData());
-              }
+                  return database.scan(listCol);
 
-              case SCAN:
-                 String scanCol = request.getCollectionName() != null ?
-                         request.getCollectionName() :
-                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 return database.scan(scanCol);
+               // 索引
+               case CREATE_INDEX: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   String ciCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   String ciField = request.getKey() != null ? request.getKey() :
+                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                   return database.createIndex(ciCol, ciField);
+               }
+               case DROP_INDEX: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   String diCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   String diField = request.getKey() != null ? request.getKey() :
+                           (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                   return database.dropIndex(diCol, diField);
+               }
+               case LIST_INDEXES: {
+                   String liCol = request.getCollectionName() != null ?
+                           request.getCollectionName() :
+                           (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                   return database.listIndexes(liCol);
+               }
 
-             case LIST_KEYS:
-                 String listCol = request.getCollectionName() != null ?
-                         request.getCollectionName() :
-                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 return database.scan(listCol);
-
-              // 索引
-              case CREATE_INDEX: {
-                  String ciCol = request.getCollectionName() != null ?
-                          request.getCollectionName() :
-                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  String ciField = request.getKey() != null ? request.getKey() :
-                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                  return database.createIndex(ciCol, ciField);
-              }
-              case DROP_INDEX: {
-                  String diCol = request.getCollectionName() != null ?
-                          request.getCollectionName() :
-                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  String diField = request.getKey() != null ? request.getKey() :
-                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                  return database.dropIndex(diCol, diField);
-              }
-              case LIST_INDEXES: {
-                  String liCol = request.getCollectionName() != null ?
-                          request.getCollectionName() :
-                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                  return database.listIndexes(liCol);
-              }
-
-              // 持久化
-              case SAVE:
-                  return database.save();
-              case LOAD:
-                  return database.load(request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 
-             // 系统
-             case PING:
-                 return Response.ok("PONG", System.currentTimeMillis());
-             case QUIT:
-                 return Response.ok("再见！");
-             case HELP:
-                 return getHelp();
-             default:
-                 return Response.fail("未知命令");
-         }
-     }
+               // 持久化
+               case SAVE:
+                   return database.save();
+               case LOAD:
+                   return database.load(request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  
+              // 系统
+              case PING:
+                  return Response.ok("PONG", System.currentTimeMillis());
+              case QUIT:
+                  return Response.ok("再见！");
+              case HELP:
+                  return getHelp();
+              default:
+                  return Response.fail("未知命令");
+          }
+      }
      
      private Response getHelp() {
          String help = """
