@@ -297,23 +297,23 @@ public KV put(String key, Object value) {
 
 ```
 
-### support1:在 mini-db 提示符前显示当前数据库名
+### support1:在 mini-db 提示符前显示当前数据库名√
 - 说明：使用 `USE DATABASE <name>` 切换到某个数据库后，提示符会变为 `<name> mini-db>`，提示当前所在数据库。
 - 实现：`ConsoleUI` 增加 `currentDb` 字段记录当前数据库，`handleUse()` 在 `USE` 成功后更新该字段，`buildPrompt()` 据此生成提示符。
 - 修改 `client/ConsoleUI.java`
 
-### support2:支持 TABLE / TABLES / TBL 作为 COLLECTION 的别名
+### support2:支持 TABLE / TABLES / TBL 作为 COLLECTION 的别名√
 - 说明：`CREATE TABLE`、`DROP TABLE`、`LIST TABLES`、`CREATE TBL`、`LIST TBL` 等均等同于 COLLECTION 操作。缩写的 `TBL` 与 `TABLE` 功能一致。
 - 修改 `client/ConsoleUI.java` 的 `handleCreate()`、`handleDrop()`、`handleList()`、`printHelp()`
 
-### support3:命令历史记录功能（HISTORY / !n）
+### support3:命令历史记录功能（HISTORY / !n）√
 - 说明：记录最近 1000 条命令，通过 `HISTORY` 查看、`!<n>` 快捷执行。IDEA Run 控制台不支持 ↑↓ 翻历史（伪终端限制），改用命令替代。
 - 实现：`ConsoleReader` 使用 `BufferedReader` 读取输入，`ArrayList` 维护历史。支持中文输入。
 - 修改 `client/ConsoleReader.java`、`client/ConsoleUI.java`（添加 `handleHistory`、`handleBang`）
 
-### support4:在put的时候有key:value，然后where条件有key=value，有些混乱，可以让where的也是用:
+### support4:在put的时候有key:value，然后where条件有key=value，有些混乱，可以让where的也是用:√
 
-### support5:历史记录倒叙，最新的命令在最前面
+### support5:历史记录倒叙，最新的命令在最前面√
 
 ### doc-put:PUT 改为文档式（兼容 MySQL 行概念）
 - 说明：`PUT students s001 name:小明 age:18` 将多个字段作为 Map 存入，同 key 再次 PUT 时合并字段（新增/覆盖）。SCAN 显示为表格。
