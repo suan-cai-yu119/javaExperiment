@@ -147,6 +147,10 @@ public class ClusterManager {
         return nodes.get(currentNodeId);
     }
 
+    public ClusterNode getNode(String nodeId) {
+        return nodes.get(nodeId);
+    }
+
     public Map<String, Object> getClusterStatus() {
         Map<String, Object> status = new LinkedHashMap<>();
         status.put("clusterEnabled", clusterEnabled);

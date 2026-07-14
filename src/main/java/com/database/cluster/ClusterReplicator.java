@@ -66,6 +66,7 @@ public class ClusterReplicator {
     public void startSlave(String masterHost, int masterPort) {
         running = true;
         new Thread(() -> {
+            ScheduledExecutorService heartbeater = null;
             while (running) {
                 try {
                     Socket s = new Socket(masterHost, masterPort);
@@ -81,6 +82,21 @@ public class ClusterReplicator {
                         LOG.info("已注册到主节点 " + masterHost + ":" + masterPort);
                     }
 
+                    // 维持心跳，防止空闲断开
+                    ClusterMessage heartbeatMsg = new ClusterMessage(ClusterMessage.Type.HEARTBEAT,
+                            self, self.getNodeId());
+                    heartbeater = Executors.newSingleThreadScheduledExecutor(r -> {
+                        Thread t = new Thread(r, "heartbeat-to-master");
+                        t.setDaemon(true);
+                        return t;
+                    });
+                    heartbeater.scheduleAtFixedRate(() -> {
+                        try {
+                            oos.writeObject(heartbeatMsg);
+                            oos.flush();
+                        } catch (IOException ignored) {}
+                    }, 0, Protocol.HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
+
                     while (running) {
                         Object obj = ois.readObject();
                         if (obj instanceof ClusterMessage msg) {
@@ -90,6 +106,10 @@ public class ClusterReplicator {
                 } catch (Exception e) {
                     if (running) {
                         LOG.warning("与主节点连接断开，5秒后重试: " + e.getMessage());
+                        if (heartbeater != null) {
+                            heartbeater.shutdownNow();
+                            heartbeater = null;
+                        }
                         try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
                     }
                 }
@@ -173,6 +193,7 @@ public class ClusterReplicator {
 
         @Override
         public void run() {
+            ScheduledExecutorService heartbeater = null;
             try {
                 ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
                 ClusterMessage reg = (ClusterMessage) ois.readObject();
@@ -185,22 +206,38 @@ public class ClusterReplicator {
                     oos.flush();
                     LOG.info("从节点已注册: " + slaveNode.getNodeId());
                 }
+                // 维持心跳，防止空闲断开
+                ClusterMessage heartbeatMsg = new ClusterMessage(ClusterMessage.Type.HEARTBEAT,
+                        clusterManager.getSelf(), clusterManager.getCurrentNodeId());
+                heartbeater = Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "heartbeat-to-slave-" + socket.getPort());
+                    t.setDaemon(true);
+                    return t;
+                });
+                heartbeater.scheduleAtFixedRate(() -> send(heartbeatMsg),
+                        0, Protocol.HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
                 while (active) {
                     try {
                         Object obj = ois.readObject();
                         if (obj instanceof ClusterMessage msg) {
                             if (msg.getType() == ClusterMessage.Type.HEARTBEAT) {
-                                clusterManager.getSelf().updateHeartbeat();
+                                ClusterNode slaveNode = clusterManager.getNode(msg.getSenderId());
+                                if (slaveNode != null) slaveNode.updateHeartbeat();
                             }
                         }
-                    } catch (EOFException e) { break; }
+                    } catch (EOFException e) {
+                        LOG.warning("从节点连接已关闭: " + socket.getRemoteSocketAddress());
+                        break;
+                    }
                 }
             } catch (Exception e) {
                 LOG.warning("从节点连接异常: " + e.getMessage());
             } finally {
                 active = false;
                 slaves.remove(this);
+                if (heartbeater != null) heartbeater.shutdownNow();
                 close();
+                LOG.info("从节点已断开: " + socket.getRemoteSocketAddress());
             }
         }
     }
