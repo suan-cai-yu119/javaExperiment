@@ -87,6 +87,9 @@ public class IndexManager implements Serializable {
 
     public void rebuild(Map<String, KV> allData) {
         indexes.clear();
+        for (String field : indexedFields) {
+            indexes.put(field, new ConcurrentSkipListMap<>());
+        }
         for (Map.Entry<String, KV> e : allData.entrySet()) {
             onPut(e.getKey(), e.getValue().getValue());
         }

@@ -4,6 +4,7 @@
  
 import java.io.*;
 import java.nio.file.*;
+import java.nio.file.attribute.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Logger;
@@ -93,12 +94,11 @@ public class Database {
             return Response.fail("数据库 '" + name + "' 不存在");
         }
         databases.remove(name);
-        // 删除持久化文件
-        deleteDatabaseFiles(name);
-        // 关闭并删除 WAL
+        // 先关闭 WAL 释放文件句柄（Windows 需要），再删除文件
         WalWriter ww = walWriters.remove(name);
         if (ww != null) ww.close();
         deleteWalFiles(name);
+        deleteDatabaseFiles(name);
         if (name.equals(currentDatabase)) {
             currentDatabase = null;
         }
@@ -448,11 +448,16 @@ public class Database {
             String dbDir = Paths.get(DATA_DIR, currentDatabase).toString();
             Path sstDir = Paths.get(dbDir, "sst");
             ConcurrentHashMap<String, Collection_> db = databases.get(currentDatabase);
+            boolean sstExists = Files.exists(sstDir);
+            if (db == null && !sstExists) {
+                return Response.fail("数据库 '" + currentDatabase + "' 不存在或数据文件已删除");
+            }
             if (db == null) {
                 db = new ConcurrentHashMap<>();
                 databases.put(currentDatabase, db);
             }
-            if (Files.exists(sstDir)) {
+            int loadedCollections = 0;
+            if (sstExists) {
                 Map<String, List<Path>> colFiles = new HashMap<>();
                 try (DirectoryStream<Path> ds = Files.newDirectoryStream(sstDir, "*" + ".sst")) {
                     for (Path p : ds) {
@@ -470,12 +475,26 @@ public class Database {
                         db.put(e.getKey(), col);
                     }
                     col.assignSstables(paths);
+                    loadedCollections++;
                 }
             }
             WalWriter wal = getWal();
-            if (wal != null) replayWal(currentDatabase);
+            boolean walReplayed = false;
+            if (wal != null) {
+                int count = replayWal(currentDatabase);
+                walReplayed = count > 0;
+            }
             dirtyDatabases.remove(currentDatabase);
-            return Response.ok("数据已从 " + sstDir + " 加载 (SSTable)，含WAL回放");
+            StringBuilder msg = new StringBuilder();
+            if (loadedCollections > 0) {
+                msg.append("数据已从 ").append(sstDir).append(" 加载 (").append(loadedCollections).append(" 个集合)");
+            } else {
+                msg.append("数据库 '").append(currentDatabase).append("' 已就绪（无 SSTable 文件）");
+            }
+            if (walReplayed) {
+                msg.append("，WAL回放完成");
+            }
+            return Response.ok(msg.toString());
         } catch (IOException e) {
             return Response.fail("加载失败: " + e.getMessage());
         }
@@ -508,11 +527,11 @@ public class Database {
         return Response.ok("自动恢复完成: 加载 " + loaded + " 个数据库，WAL回放 " + recovered + " 个");
     }
 
-    private void replayWal(String dbName) {
+    private int replayWal(String dbName) {
         WalWriter wal = walWriters.get(dbName);
-        if (wal == null) return;
+        if (wal == null) return 0;
         ConcurrentHashMap<String, Collection_> db = databases.get(dbName);
-        if (db == null) return;
+        if (db == null) return 0;
         List<WalWriter.WalEntry> entries = wal.readAll();
         // 找到最后一个 CHECKPOINT 的位置
         int lastCk = -1;
@@ -521,6 +540,7 @@ public class Database {
                 lastCk = i;
             }
         }
+        int count = 0;
         // 从最后一个 CHECKPOINT 之后开始回放
         for (int i = lastCk + 1; i < entries.size(); i++) {
             WalWriter.WalEntry entry = entries.get(i);
@@ -534,41 +554,67 @@ public class Database {
                 case "DEL" -> col.delete(entry.key);
                 case "UPD" -> col.update(entry.key, entry.value);
             }
+            count++;
         }
+        return count;
     }
 
     private void deleteDatabaseFiles(String name) {
+        Path dbDir = Paths.get(DATA_DIR, name);
+        if (!Files.exists(dbDir)) return;
         try {
-            Path sstDir = Paths.get(DATA_DIR, name, "sst");
-            if (Files.exists(sstDir)) {
-                try (var files = Files.walk(sstDir)) {
-                    files.sorted(Comparator.reverseOrder())
-                         .map(java.nio.file.Path::toFile)
-                         .forEach(File::delete);
+            Files.walkFileTree(dbDir, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    try {
+                        Files.delete(file);
+                    } catch (IOException e) {
+                        LOG.warning("删除文件失败: " + file + " - " + e.getMessage());
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-            }
-            Path dbDir = Paths.get(DATA_DIR, name);
-            if (Files.exists(dbDir)) {
-                try (var files = Files.walk(dbDir)) {
-                    files.sorted(Comparator.reverseOrder())
-                         .map(java.nio.file.Path::toFile)
-                         .forEach(File::delete);
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                    try {
+                        Files.delete(dir);
+                    } catch (IOException e) {
+                        LOG.warning("删除目录失败: " + dir + " - " + e.getMessage());
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-            }
-        } catch (IOException ignored) {}
+            });
+        } catch (IOException e) {
+            LOG.warning("删除数据库文件失败: " + dbDir + " - " + e.getMessage());
+        }
     }
 
     private void deleteWalFiles(String name) {
+        Path walDir = Paths.get(DATA_DIR, name, "wal");
+        if (!Files.exists(walDir)) return;
         try {
-            Path walDir = Paths.get(DATA_DIR, name, "wal");
-            if (Files.exists(walDir)) {
-                try (var files = Files.walk(walDir)) {
-                    files.sorted(Comparator.reverseOrder())
-                         .map(java.nio.file.Path::toFile)
-                         .forEach(File::delete);
+            Files.walkFileTree(walDir, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    try {
+                        Files.delete(file);
+                    } catch (IOException e) {
+                        LOG.warning("删除WAL文件失败: " + file + " - " + e.getMessage());
+                    }
+                    return FileVisitResult.CONTINUE;
                 }
-            }
-        } catch (IOException ignored) {}
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
+                    try {
+                        Files.delete(dir);
+                    } catch (IOException e) {
+                        LOG.warning("删除WAL目录失败: " + dir + " - " + e.getMessage());
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            LOG.warning("删除WAL文件失败: " + walDir + " - " + e.getMessage());
+        }
     }
      
     /**
