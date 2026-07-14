@@ -78,14 +78,12 @@ public class Server {
                 System.out.println("  " + recoveryResp.getMessage());
                 
                 // 启动 HTTP RESTful API 服务器
-               try {
-                   int httpPort = port + Protocol.HTTP_PORT_OFFSET;
-                   HttpApiServer httpApi = new HttpApiServer(database, clusterManager, httpPort);
-                   httpApi.start();
-               } catch (IOException e) {
-                   System.err.println("⚠ HTTP API 服务器启动失败: " + e.getMessage());
-                   System.err.println("  提示：端口 " + (port + Protocol.HTTP_PORT_OFFSET) + " 可能被占用");
-               }
+                try {
+                    HttpApiServer httpApi = new HttpApiServer(database, clusterManager);
+                    httpApi.start();
+                } catch (IOException e) {
+                    System.err.println("? HTTP API 服务器启动失败: " + e.getMessage());
+                }
                 
                 System.out.println("✓ 等待客户端连接...\n");
                
