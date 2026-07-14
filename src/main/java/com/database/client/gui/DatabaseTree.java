@@ -26,6 +26,17 @@ public class DatabaseTree extends JTree {
 
         addTreeExpansionListener(new TreeExpansionListener());
         addMouseListener(new TreeMouseListener());
+        addTreeSelectionListener(e -> {
+            TreePath path = e.getNewLeadSelectionPath();
+            if (path == null) return;
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+            if (!(node.getUserObject() instanceof TreeNodeData data)) return;
+            if (data.type == TreeNodeData.Type.DATABASE) {
+                mainFrame.selectDatabase(data.name);
+            } else if (data.type == TreeNodeData.Type.COLLECTION) {
+                mainFrame.selectCollection(data.name);
+            }
+        });
     }
 
     public void setClient(Client client) {
@@ -88,8 +99,18 @@ public class DatabaseTree extends JTree {
     private void loadCollections(DefaultMutableTreeNode dbNode) {
         if (client == null || !(dbNode.getUserObject() instanceof TreeNodeData data)
                 || data.type != TreeNodeData.Type.DATABASE) return;
-        Set<String> cols = fetchCollections(data.name);
-        applyCollections(dbNode, cols);
+        new SwingWorker<Set<String>, Void>() {
+            @Override
+            protected Set<String> doInBackground() {
+                return fetchCollections(data.name);
+            }
+            @Override
+            protected void done() {
+                try {
+                    applyCollections(dbNode, get());
+                } catch (Exception ignored) {}
+            }
+        }.execute();
     }
 
     private void applyCollections(DefaultMutableTreeNode dbNode, Set<String> cols) {

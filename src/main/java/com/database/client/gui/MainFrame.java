@@ -254,6 +254,48 @@ public class MainFrame extends JFrame {
 
     // ==================== 数据操作 ====================
 
+    void selectDatabase(String name) {
+        if (client == null) return;
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                Response resp = client.sendCommand(CommandType.USE_DATABASE, name);
+                if (resp.isSuccess()) currentDb = name;
+                return null;
+            }
+            @Override
+            protected void done() {
+                updateInfoLabel();
+            }
+        }.execute();
+    }
+
+    void selectCollection(String col) {
+        if (client == null) return;
+        log("? 扫描集合: " + col);
+        new SwingWorker<Void, Void>() {
+            private Response resp;
+            @Override
+            protected Void doInBackground() {
+                resp = client.sendCommand(CommandType.SCAN, col);
+                return null;
+            }
+            @Override
+            protected void done() {
+                if (resp != null && resp.isSuccess()) {
+                    if (resp.getData() instanceof List<?> list) {
+                        List<KV> kvs = list.stream()
+                                .filter(x -> x instanceof KV).map(x -> (KV) x).toList();
+                        tableModel.setData(kvs);
+                        log("? " + resp.getMessage());
+                    }
+                } else {
+                    log("? " + (resp != null ? resp.getMessage() : "无响应"));
+                }
+            }
+        }.execute();
+    }
+
     void scanCollection(final String col) {
         if (client == null || col == null) return;
         log("? 扫描集合: " + col);
@@ -391,7 +433,8 @@ public class MainFrame extends JFrame {
                         }
                         if (workerResp.isSuccess() && ("USE".equals(workerCmd)
                                 || "CREATE".equals(workerCmd)
-                                || "DROP".equals(workerCmd))) {
+                                || "DROP".equals(workerCmd)
+                                || "LOAD".equals(workerCmd))) {
                             Set<String> dbs = databaseTree.fetchDatabases();
                             publish(new GuiMessage("TREE_DBS", dbs));
                         }
@@ -430,11 +473,7 @@ public class MainFrame extends JFrame {
 
             @Override
             protected void done() {
-                Component info = ((JPanel) ((JSplitPane) getContentPane()
-                        .getComponent(1)).getRightComponent()).getComponent(2);
-                if (info instanceof JLabel label) {
-                    label.setText("当前数据库: " + (currentDb != null ? currentDb : "(无)"));
-                }
+                updateInfoLabel();
             }
         }.execute();
     }
@@ -575,6 +614,21 @@ public class MainFrame extends JFrame {
         };
         if (SwingUtilities.isEventDispatchThread()) r.run();
         else SwingUtilities.invokeLater(r);
+    }
+
+    void updateInfoLabel() {
+        String text = "当前数据库: " + (currentDb != null ? currentDb : "(无)");
+        updateLabelInContainer(getContentPane(), text);
+    }
+
+    private void updateLabelInContainer(Container container, String text) {
+        for (Component c : container.getComponents()) {
+            if ("infoLabel".equals(c.getName()) && c instanceof JLabel label) {
+                label.setText(text);
+                return;
+            }
+            if (c instanceof Container sub) updateLabelInContainer(sub, text);
+        }
     }
 
     private static class GuiMessage {
