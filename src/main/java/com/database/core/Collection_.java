@@ -3,6 +3,7 @@ package com.database.core;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 public class Collection_ implements Serializable {
@@ -18,6 +19,7 @@ public class Collection_ implements Serializable {
     private transient CacheManager cacheManager;
     private transient List<Path> sstablePaths = new ArrayList<>();
     private transient int nextSeq;
+    private transient Set<String> tombstones = ConcurrentHashMap.newKeySet();
 
     public Collection_(String name) {
         this.name = name;
@@ -26,6 +28,7 @@ public class Collection_ implements Serializable {
         this.createdTime = System.currentTimeMillis();
         this.indexManager = new IndexManager();
         this.cacheManager = new CacheManager();
+        this.tombstones = ConcurrentHashMap.newKeySet();
     }
 
     public String getName() { return name; }
@@ -78,6 +81,7 @@ public class Collection_ implements Serializable {
             indexManager.onDelete(key, kv.getValue());
             cacheManager.remove(key);
         }
+        tombstones.add(key);
         return kv;
     }
 
@@ -118,7 +122,9 @@ public class Collection_ implements Serializable {
         for (Path p : sstablePaths) {
             try {
                 for (KV kv : SstableUtil.scanAll(p)) {
-                    merged.putIfAbsent(kv.getKey(), kv);
+                    if (!tombstones.contains(kv.getKey())) {
+                        merged.putIfAbsent(kv.getKey(), kv);
+                    }
                 }
             } catch (IOException ignored) {}
         }
@@ -163,6 +169,7 @@ public class Collection_ implements Serializable {
     public void clear() {
         data.clear();
         sstablePaths.clear();
+        tombstones.clear();
         indexManager.clear();
         cacheManager.clear();
     }
@@ -229,6 +236,7 @@ public class Collection_ implements Serializable {
         this.cacheManager = new CacheManager();
         this.sstablePaths = new ArrayList<>();
         this.nextSeq = 0;
+        this.tombstones = ConcurrentHashMap.newKeySet();
     }
 
     public void saveToFile(String filePath) throws IOException {
