@@ -258,29 +258,50 @@ public Response scan(String collection) {
                  return database.scan(listCol);
 ```
 
-### bug7:put功能有点神秘
+### bug7:put 的 key 重复时覆盖旧数据
+- 原因：原实现中 `Collection_.put()` 直接覆盖相同 key 的值，不符合用户期望的"相同 key 追加"行为
+- 修复：修改 `Collection_.put()` —— 若 key 已存在且 value 是 List 则追加，若不是 List 则包装为 List 再追加
+- 修改 `core/Collection_.java` 的 `put()` 方法
+```java
+// 修改后
+public KV put(String key, Object value) {
+    KV existing = data.get(key);
+    if (existing != null) {
+        Object oldVal = existing.getValue();
+        List<Object> list;
+        if (oldVal instanceof List<?> oldList) {
+            list = new ArrayList<>(oldList);
+        } else {
+            list = new ArrayList<>();
+            list.add(oldVal);
+        }
+        list.add(value);
+        KV kv = new KV(key, list, nextVersion++);
+        data.put(key, kv);
+        return kv;
+    }
+    KV kv = new KV(key, value, nextVersion++);
+    data.put(key, kv);
+    return kv;
+}
+```
 
-#### support1:在mini-db前加一个
-#### support2:把展示的集合collection和collections和cols换成table和tables和（？你取一个缩写）
-#### support3:做一个cmd的记录功能，记录最后1000条指令，按上下来切换。
+### support1:在 mini-db 提示符前显示当前数据库名
+- 说明：使用 `USE DATABASE <name>` 切换到某个数据库后，提示符会变为 `<name> mini-db>`，提示当前所在数据库。
+- 实现：`ConsoleUI` 增加 `currentDb` 字段记录当前数据库，`handleUse()` 在 `USE` 成功后更新该字段，`buildPrompt()` 据此生成提示符。
+- 修改 `client/ConsoleUI.java`
 
+### support2:支持 TABLE / TABLES / TBL 作为 COLLECTION 的别名
+- 说明：`CREATE TABLE`、`DROP TABLE`、`LIST TABLES`、`CREATE TBL`、`LIST TBL` 等均等同于 COLLECTION 操作。缩写的 `TBL` 与 `TABLE` 功能一致。
+- 修改 `client/ConsoleUI.java` 的 `handleCreate()`、`handleDrop()`、`handleList()`、`printHelp()`
 
+### support3:命令历史记录功能（HISTORY / !n）
+- 说明：记录最近 1000 条命令，通过 `HISTORY` 查看、`!<n>` 快捷执行。IDEA Run 控制台不支持 ↑↓ 翻历史（伪终端限制），改用命令替代。
+- 实现：`ConsoleReader` 使用 `BufferedReader` 读取输入，`ArrayList` 维护历史。支持中文输入。
+- 修改 `client/ConsoleReader.java`、`client/ConsoleUI.java`（添加 `handleHistory`、`handleBang`）
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### doc-put:PUT 改为文档式（兼容 MySQL 行概念）
+- 说明：`PUT students s001 name:小明 age:18` 将多个字段作为 Map 存入，同 key 再次 PUT 时合并字段（新增/覆盖）。SCAN 显示为表格。
+- 改动：
+  - `core/Collection_.java` — `put()` 方法：旧值和新值均为 Map 时执行 merge，否则直接覆盖
+  - `client/ConsoleUI.java` — `handlePut()`：解析 `field:value` 语法；`handleScan()`：全部为 Map 值时以表格展示；`handleGet()`：Map 值分行展示

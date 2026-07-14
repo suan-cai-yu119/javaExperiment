@@ -31,7 +31,8 @@
      public long getCreatedTime() { return createdTime; }
      
      /**
-      * 插入键值对
+      * 插入/替换文档（NoSQL upsert 语义）
+      * 若 key 已存在，直接替换整个值
       */
      public KV put(String key, Object value) {
          KV kv = new KV(key, value, nextVersion++);
@@ -54,15 +55,28 @@
      }
      
      /**
-      * 更新键值对
+      * 更新文档字段（NoSQL $set 语义）
+      * 若现有值和更新值均为 Map，则合并字段；否则直接替换
+      * 替换整个 KV 条目而非原地修改，避免 ObjectOutputStream 缓存问题
       */
      public KV update(String key, Object newValue) {
          KV kv = data.get(key);
          if (kv != null) {
-             kv.setValue(newValue);
-             kv.setVersion(nextVersion++);
+             Object existing = kv.getValue();
+             Object finalValue;
+             if (existing instanceof Map && newValue instanceof Map) {
+                 Map<String, Object> merged = new LinkedHashMap<>();
+                 merged.putAll((Map<String, Object>) existing);
+                 merged.putAll((Map<String, Object>) newValue);
+                 finalValue = merged;
+             } else {
+                 finalValue = newValue;
+             }
+             KV newKv = new KV(key, finalValue, nextVersion++);
+             data.put(key, newKv);
+             return newKv;
          }
-         return kv;
+         return null;
      }
      
      /**

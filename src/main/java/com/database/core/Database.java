@@ -2,11 +2,10 @@
  
  import com.database.common.Response;
  
- import java.io.*;
- import java.nio.file.*;
- import java.util.*;
- import java.util.concurrent.ConcurrentHashMap;
- import java.util.stream.Collectors;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
  
  /**
   * 数据库核心引擎 - 管理多个数据库，每个数据库包含多个集合（表）
@@ -153,7 +152,32 @@
          return Response.ok("删除成功", kv);
      }
 
-     public Response update(String collection, String key, Object value) {
+      public Response deleteWhere(String collection, String field, Object value) {
+          if (collection == null || field == null || value == null) {
+              return Response.fail("参数不能为空");
+          }
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          List<String> toDelete = new ArrayList<>();
+          for (KV kv : col.scan()) {
+              Object val = kv.getValue();
+              if (val instanceof Map<?, ?> map) {
+                  Object fieldVal = map.get(field);
+                  if (Objects.equals(fieldVal, value)) {
+                      toDelete.add(kv.getKey());
+                  }
+              }
+          }
+          if (toDelete.isEmpty()) {
+              return Response.fail("没有匹配的记录");
+          }
+          for (String key : toDelete) {
+              col.delete(key);
+          }
+          return Response.ok("删除成功，共删除 " + toDelete.size() + " 条记录");
+      }
+
+      public Response update(String collection, String key, Object value) {
          if (collection == null || key == null) {
              return Response.fail("集合名称和键不能为空");
          }

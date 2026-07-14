@@ -15,9 +15,11 @@
      private String[] args;
      private String databaseName;
      private String collectionName;
-     private String key;
-     private Object value;
-     private long timestamp;
+      private String key;
+      private Object value;
+      private String filterField;
+      private Object filterValue;
+      private long timestamp;
      
      public Request() {
          this.timestamp = System.currentTimeMillis();
@@ -40,7 +42,11 @@
      public void setCollectionName(String collectionName) { this.collectionName = collectionName; }
      public String getKey() { return key; }
      public void setKey(String key) { this.key = key; }
-     public Object getValue() { return value; }
-     public void setValue(Object value) { this.value = value; }
-     public long getTimestamp() { return timestamp; }
+      public Object getValue() { return value; }
+      public void setValue(Object value) { this.value = value; }
+      public String getFilterField() { return filterField; }
+      public void setFilterField(String filterField) { this.filterField = filterField; }
+      public Object getFilterValue() { return filterValue; }
+      public void setFilterValue(Object filterValue) { this.filterValue = filterValue; }
+      public long getTimestamp() { return timestamp; }
  }

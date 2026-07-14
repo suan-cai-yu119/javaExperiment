@@ -27,28 +27,28 @@
          this.clientId = clientId;
          this.running = true;
      }
-     
+
      @Override
      public void run() {
          LOGGER.info("客户端 #" + clientId + " 已连接: " + socket.getRemoteSocketAddress());
-         
+
          try (ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
               ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream())) {
-             
+
              // 发送欢迎信息
-             oos.writeObject(Response.ok("欢迎使用迷你数据库系统 v" + Protocol.VERSION + 
+             oos.writeObject(Response.ok("欢迎使用迷你数据库系统 v" + Protocol.VERSION +
                      " | 客户端 #" + clientId));
              oos.flush();
-             
+
              while (running) {
                  try {
                      Request request = (Request) ois.readObject();
                      if (request == null) break;
-                     
+
                      Response response = processRequest(request);
                      oos.writeObject(response);
                      oos.flush();
-                     
+
                      if (request.getCommand() == CommandType.QUIT) {
                          break;
                      }
@@ -72,7 +72,7 @@
          } finally {
              close();
          }
-         
+
          LOGGER.info("客户端 #" + clientId + " 已断开连接");
      }
      
@@ -122,14 +122,17 @@
                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
                  return database.get(getCol, getKey);
 
-             case DELETE:
-                 String delCol = request.getCollectionName() != null ?
-                         request.getCollectionName() :
-                         (request.getArgs().length > 0 ? request.getArgs()[0] : null);
-                 String delKey = request.getKey() != null ?
-                         request.getKey() :
-                         (request.getArgs().length > 1 ? request.getArgs()[1] : null);
-                 return database.delete(delCol, delKey);
+              case DELETE:
+                  String delCol = request.getCollectionName() != null ?
+                          request.getCollectionName() :
+                          (request.getArgs().length > 0 ? request.getArgs()[0] : null);
+                  if (request.getFilterField() != null) {
+                      return database.deleteWhere(delCol, request.getFilterField(), request.getFilterValue());
+                  }
+                  String delKey = request.getKey() != null ?
+                          request.getKey() :
+                          (request.getArgs().length > 1 ? request.getArgs()[1] : null);
+                  return database.delete(delCol, delKey);
 
              case UPDATE:
                  String updCol = request.getCollectionName() != null ?
