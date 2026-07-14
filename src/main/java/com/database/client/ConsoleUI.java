@@ -631,8 +631,8 @@ public class ConsoleUI {
                   ║  SCAN <col>                 扫描所有文档           ║
                   ║                                                    ║
                   ║  批量操作:                                          ║
-                  ║    BATCH PUT <c> <k1> f:v... \|\| <k2>...  批量插入 ║
-                  ║    BATCH UPDATE <c> <k1> f:v... \|\| <k2>... 批量更新║
+                  ║    BATCH PUT <c> <k1> f:v...       <k2>...  批量插入 ║
+                  ║    BATCH UPDATE <c> <k1> f:v...      <k2>... 批量更新║
                   ║    UPDATE <c> WHERE f=v sf:sv...   条件批量更新    ║
                   ║                                                    ║
                   ║  持久化:                                            ║
