@@ -594,44 +594,66 @@ public class ConsoleUI {
      private void handleLoad(String[] args) {
          printResponse(client.sendCommand(CommandType.LOAD, args));
      }
-     
-      private void handleCluster(String[] args) {
-          if (args.length == 0) {
-              System.out.println("✗ 用法: CLUSTER STATUS|JOIN <host> [port]|LEAVE");
-              return;
-          }
-          String sub = args[0].toUpperCase();
-          switch (sub) {
-              case "STATUS" -> {
-                  Response resp = client.sendCommand(CommandType.CLUSTER_STATUS);
-                  printResponse(resp);
-                  if (resp.isSuccess() && resp.getData() instanceof Map<?, ?> status) {
-                      System.out.println("  集群状态:");
-                      for (Map.Entry<?, ?> e : status.entrySet()) {
-                          if (!"nodes".equals(e.getKey())) {
-                              System.out.println("    " + e.getKey() + ": " + e.getValue());
-                          }
-                      }
-                      if (status.get("nodes") instanceof List<?> nodes) {
-                          System.out.println("  节点列表:");
-                          for (Object n : nodes) {
-                              System.out.println("    - " + n);
-                          }
-                      }
-                  }
-              }
-              case "JOIN" -> {
-                  if (args.length < 2) {
-                      System.out.println("✗ 用法: CLUSTER JOIN <host> [port]");
-                      return;
-                  }
-                  String host = args[1];
-                  int port = args.length > 2 ? Integer.parseInt(args[2]) : Protocol.DEFAULT_PORT;
-                  printResponse(client.sendCommand(CommandType.CLUSTER_JOIN, host, String.valueOf(port)));
-              }
-              case "LEAVE" ->
-                  printResponse(client.sendCommand(CommandType.CLUSTER_LEAVE));
-              default -> System.out.println("✗ 未知集群命令: " + sub + "，可用: STATUS, JOIN, LEAVE");
+
+     private void handleCluster(String[] args) {
+         if (args.length == 0) {
+             System.out.println("✗ 用法: CLUSTER STATUS|JOIN <host> [port]|LEAVE");
+             return;
+         }
+         String sub = args[0].toUpperCase();
+         switch (sub) {
+             case "STATUS" -> {
+                 Response resp = client.sendCommand(CommandType.CLUSTER_STATUS);
+                 printResponse(resp);
+                 if (resp.isSuccess() && resp.getData() instanceof Map<?, ?> status) {
+                     System.out.println("\n  ╔══════════════════════════════════════════╗");
+                     System.out.println("  ║           集 群 状 态 信 息              ║");
+                     System.out.println("  ╠══════════════════════════════════════════╣");
+
+                     for (Map.Entry<?, ?> e : status.entrySet()) {
+                         if (!"nodes".equals(e.getKey())) {
+                             String key = String.valueOf(e.getKey());
+                             String value = String.valueOf(e.getValue());
+
+                             if ("currentRole".equals(key)) {
+                                 String roleIcon = "MASTER".equals(value) ? "👑" : "📋";
+                                 System.out.println("  │ 🎯 当前角色: " + roleIcon + " " + value);
+                             } else if ("totalNodes".equals(key)) {
+                                 System.out.println("  │ 📊 节点总数: " + value);
+                             } else if ("currentNode".equals(key)) {
+                                 System.out.println("  │ 🖥️  节点ID: " + value);
+                             } else if ("clusterEnabled".equals(key)) {
+                                 String statusIcon = "true".equals(value) ? "✅" : "❌";
+                                 System.out.println("  │ ⚙️  集群模式: " + statusIcon + " " + value);
+                             }
+                         }
+                     }
+
+                     if (status.get("nodes") instanceof List<?> nodes) {
+                         System.out.println("  ╠══════════════════════════════════════════╣");
+                         System.out.println("  │ 📋 节点列表 (" + nodes.size() + " 个):");
+                         System.out.println("  ╠══════════════════════════════════════════╣");
+
+                         int idx = 1;
+                         for (Object n : nodes) {
+                             if (n instanceof Map<?, ?> nodeInfo) {
+                                 String nodeId = String.valueOf(nodeInfo.get("id"));
+                                 String host = String.valueOf(nodeInfo.get("host"));
+                                 String role = String.valueOf(nodeInfo.get("role"));
+                                 boolean alive = Boolean.parseBoolean(String.valueOf(nodeInfo.get("alive")));
+
+                                 String roleIcon = "MASTER".equals(role) ? "👑" : "📋";
+                                 String aliveIcon = alive ? "🟢" : "🔴";
+
+                                 System.out.printf("  │ %d. %s %s %-12s %s%n",
+                                         idx++, roleIcon, aliveIcon, role, nodeId);
+                                 System.out.println("  │    └─ 地址: " + host);
+                             }
+                         }
+                     }
+                     System.out.println("  ╚══════════════════════════════════════════╝\n");
+                 }
+             }
           }
       }
 
@@ -652,36 +674,35 @@ public class ConsoleUI {
           client.disconnect();
       }
 
-     private void handleBang(String cmd) {
-         String numStr = cmd.substring(1);
-         try {
-             int n = Integer.parseInt(numStr);
-             List<String> history = consoleReader.getHistory();
-             if (n >= 1 && n <= history.size()) {
-                 int index = history.size() - n;
-                 String prevCmd = history.get(index);
-                 System.out.println("  " + prevCmd);
-                 processInput(prevCmd);
-             } else {
-                 System.out.println("✗ 历史索引超出范围，共 " + history.size() + " 条");
-             }
-         } catch (NumberFormatException e) {
-             System.out.println("✗ 用法: !<序号>  例: !3 执行第 3 条历史命令");
-         }
-     }
+      private void handleBang(String cmd) {
+          String numStr = cmd.substring(1);
+          try {
+              int n = Integer.parseInt(numStr) - 1;
+              List<String> history = consoleReader.getHistory();
+              if (n >= 0 && n < history.size()) {
+                  String prevCmd = history.get(n);
+                  System.out.println("  " + prevCmd);
+                  processInput(prevCmd);
+              } else {
+                  System.out.println("✗ 历史索引超出范围，共 " + history.size() + " 条");
+              }
+          } catch (NumberFormatException e) {
+              System.out.println("✗ 用法: !<序号>  例: !3 执行第 3 条历史命令");
+          }
+      }
 
-     private void handleHistory() {
-         List<String> history = consoleReader.getHistory();
-         if (history.isEmpty()) {
-             System.out.println("  (暂无历史命令)");
-         } else {
-             System.out.println("  最近 " + history.size() + " 条命令:");
-             int start = Math.max(0, history.size() - 50);
-             for (int i = history.size() - 1; i >= start; i--) {
-                 System.out.printf("  %4d  %s%n", history.size() - i, history.get(i));
-             }
-         }
-     }
+      private void handleHistory() {
+          List<String> history = consoleReader.getHistory();
+          if (history.isEmpty()) {
+              System.out.println("  (暂无历史命令)");
+          } else {
+              System.out.println("  最近 " + history.size() + " 条命令:");
+              int start = Math.max(0, history.size() - 50);
+              for (int i = start; i < history.size(); i++) {
+                  System.out.printf("  %4d  %s%n", i + 1, history.get(i));
+              }
+          }
+      }
      
      private void clearScreen() {
          System.out.print("\033[H\033[2J");
