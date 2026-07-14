@@ -81,6 +81,11 @@ public class ClusterReplicator {
                     Object resp = ois.readObject();
                     if (resp instanceof ClusterMessage msg && msg.getType() == ClusterMessage.Type.REGISTERED) {
                         LOG.info("已注册到主节点 " + masterHost + ":" + masterPort);
+                        // 解析全量节点列表，更新本地集群视图
+                        List<ClusterNode> nodes = msg.getDataAs();
+                        for (ClusterNode n : nodes) {
+                            clusterManager.addNode(n);
+                        }
                     }
 
                     // 维持心跳，防止空闲断开
@@ -126,6 +131,13 @@ public class ClusterReplicator {
             }
             case HEARTBEAT -> {
                 clusterManager.getSelf().updateHeartbeat();
+            }
+            case NODE_LIST -> {
+                List<ClusterNode> nodes = msg.getDataAs();
+                for (ClusterNode n : nodes) {
+                    clusterManager.addNode(n);
+                }
+                LOG.fine("已同步节点列表，当前 " + nodes.size() + " 个节点");
             }
         }
     }
@@ -202,10 +214,17 @@ public class ClusterReplicator {
                     ClusterNode slaveNode = reg.getDataAs();
                     clusterManager.addNode(slaveNode);
                     oos = new ObjectOutputStream(socket.getOutputStream());
+                    // 回复全量节点列表，让新节点知道集群中所有节点
                     oos.writeObject(new ClusterMessage(ClusterMessage.Type.REGISTERED,
-                            clusterManager.getSelf(), clusterManager.getCurrentNodeId()));
+                            clusterManager.getAllNodes(), clusterManager.getCurrentNodeId()));
                     oos.flush();
                     LOG.info("从节点已注册: " + slaveNode.getNodeId());
+                    // 广播 NODE_LIST 给其他已连接的从节点，让它们知道有新节点加入
+                    ClusterMessage nodeListMsg = new ClusterMessage(ClusterMessage.Type.NODE_LIST,
+                            clusterManager.getAllNodes(), clusterManager.getCurrentNodeId());
+                    for (SlaveConnection sc : slaves) {
+                        if (sc != this) sc.send(nodeListMsg);
+                    }
                 }
                 // 维持心跳，防止空闲断开
                 ClusterMessage heartbeatMsg = new ClusterMessage(ClusterMessage.Type.HEARTBEAT,
@@ -239,6 +258,12 @@ public class ClusterReplicator {
                 if (heartbeater != null) heartbeater.shutdownNow();
                 close();
                 LOG.info("从节点已断开: " + socket.getRemoteSocketAddress());
+                // 告知其他从节点节点列表已变化
+                ClusterMessage nodeListMsg = new ClusterMessage(ClusterMessage.Type.NODE_LIST,
+                        clusterManager.getAllNodes(), clusterManager.getCurrentNodeId());
+                for (SlaveConnection sc : slaves) {
+                    sc.send(nodeListMsg);
+                }
             }
         }
     }

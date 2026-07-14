@@ -16,6 +16,7 @@ public class ClusterMessage implements Serializable {
         SNAPSHOT_REQ,
         SNAPSHOT_DATA,
         ELECTION,
+        NODE_LIST,
     }
 
     private Type type;

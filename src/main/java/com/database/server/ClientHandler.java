@@ -100,26 +100,6 @@ import static com.database.cluster.ClusterReplicator.WalEntry;
        * 处理客户端请求 - 使用反射和策略模式思想
        */
       private Response processRequest(Request request) {
-          // 集群命令处理
-          if (clusterManager != null && clusterManager.isClusterEnabled()) {
-              switch (request.getCommand()) {
-                  case CLUSTER_STATUS -> {
-                      return Response.ok("集群状态", clusterManager.getClusterStatus());
-                  }
-                  case CLUSTER_JOIN -> {
-                      String coordHost = request.getArgs().length > 0 ? request.getArgs()[0] : "127.0.0.1";
-                      int coordPort = request.getArgs().length > 1 ?
-                              Integer.parseInt(request.getArgs()[1]) : Protocol.DEFAULT_PORT;
-                      clusterManager.joinCluster(coordHost, coordPort);
-                      return Response.ok("已加入集群");
-                  }
-                  case CLUSTER_LEAVE -> {
-                      clusterManager.leaveCluster();
-                      return Response.ok("已离开集群");
-                  }
-              }
-          }
-
           switch (request.getCommand()) {
               // 数据库操作
               case CREATE_DATABASE:
@@ -279,10 +259,32 @@ import static com.database.cluster.ClusterReplicator.WalEntry;
                   return Response.ok("PONG", System.currentTimeMillis());
               case QUIT:
                   return Response.ok("再见！");
-              case HELP:
-                  return getHelp();
-              default:
-                  return Response.fail("未知命令");
+               case HELP:
+                   return getHelp();
+
+               // 集群命令（未启用集群时给提示）
+               case CLUSTER_STATUS:
+                   if (clusterManager == null || !clusterManager.isClusterEnabled()) {
+                       return Response.fail("集群模式未启用，请使用 --cluster 参数启动服务器");
+                   }
+                   return Response.ok("集群状态", clusterManager.getClusterStatus());
+               case CLUSTER_JOIN:
+                   if (clusterManager == null || !clusterManager.isClusterEnabled()) {
+                       return Response.fail("集群模式未启用，请使用 --cluster 参数启动服务器");
+                   }
+                   String coordHost = request.getArgs().length > 0 ? request.getArgs()[0] : "127.0.0.1";
+                   int coordPort = request.getArgs().length > 1 ?
+                           Integer.parseInt(request.getArgs()[1]) : Protocol.DEFAULT_PORT;
+                   clusterManager.joinCluster(coordHost, coordPort);
+                   return Response.ok("已加入集群");
+               case CLUSTER_LEAVE:
+                   if (clusterManager == null || !clusterManager.isClusterEnabled()) {
+                       return Response.fail("集群模式未启用，请使用 --cluster 参数启动服务器");
+                   }
+                   clusterManager.leaveCluster();
+                   return Response.ok("已离开集群");
+               default:
+                   return Response.fail("未知命令");
           }
       }
      
