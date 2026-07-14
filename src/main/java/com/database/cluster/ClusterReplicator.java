@@ -67,10 +67,16 @@ public class ClusterReplicator {
     public void startSlave(String masterHost, int masterPort) {
         running = true;
         new Thread(() -> {
+            LOG.info("从节点线程已启动，正在连接主节点 " + masterHost + ":" + masterPort);
             ScheduledExecutorService heartbeater = null;
             while (running) {
                 try {
+                    LOG.info("尝试连接主节点 " + masterHost + ":" + masterPort);
                     Socket s = new Socket(masterHost, masterPort);
+                    LOG.info("TCP 连接成功，创建 ObjectStream...");
+                    ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+                    LOG.info("ObjectOutputStream 创建完成，发送 REGISTER...");
+                    ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
                     ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
                     ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
 
