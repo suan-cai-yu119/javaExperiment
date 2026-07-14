@@ -56,6 +56,7 @@ public class Collection_ implements Serializable {
     }
 
     public KV get(String key) {
+        if (tombstones.contains(key)) return null;
         Object cached = cacheManager.get(key);
         if (cached instanceof KV kv) return kv;
         KV kv = data.get(key);
@@ -76,8 +77,9 @@ public class Collection_ implements Serializable {
     }
 
     public KV delete(String key) {
-        KV kv = data.remove(key);
+        KV kv = get(key);
         if (kv != null) {
+            data.remove(key);
             indexManager.onDelete(key, kv.getValue());
             cacheManager.remove(key);
         }
@@ -86,7 +88,7 @@ public class Collection_ implements Serializable {
     }
 
     public KV update(String key, Object newValue) {
-        KV kv = data.get(key);
+        KV kv = get(key);
         if (kv != null) {
             Object existing = kv.getValue();
             Object finalValue;

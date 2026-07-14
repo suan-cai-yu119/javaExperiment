@@ -389,8 +389,28 @@ public class Database {
     // ========== 持久化 ==========
 
     public Response save() {
-        if (currentDatabase == null) return Response.fail("请先选择数据库");
-        return saveDatabase(currentDatabase);
+        if (currentDatabase != null) {
+            return saveDatabase(currentDatabase);
+        }
+        // 未选中数据库时，保存所有脏数据库
+        if (dirtyDatabases.isEmpty()) {
+            return Response.fail("没有需要保存的数据");
+        }
+        int saved = 0;
+        int failed = 0;
+        StringBuilder details = new StringBuilder();
+        for (String db : new HashSet<>(dirtyDatabases)) {
+            Response r = saveDatabase(db);
+            if (r.isSuccess()) {
+                saved++;
+            } else {
+                failed++;
+                details.append(r.getMessage()).append("; ");
+            }
+        }
+        String msg = "已保存 " + saved + " 个数据库";
+        if (failed > 0) msg += "，失败 " + failed + " 个: " + details;
+        return Response.ok(msg);
     }
 
     private Response saveDatabase(String dbName) {
