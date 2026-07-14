@@ -652,35 +652,36 @@ public class ConsoleUI {
           client.disconnect();
       }
 
-      private void handleBang(String cmd) {
-          String numStr = cmd.substring(1);
-          try {
-              int n = Integer.parseInt(numStr) - 1;
-              List<String> history = consoleReader.getHistory();
-              if (n >= 0 && n < history.size()) {
-                  String prevCmd = history.get(n);
-                  System.out.println("  " + prevCmd);
-                  processInput(prevCmd);
-              } else {
-                  System.out.println("✗ 历史索引超出范围，共 " + history.size() + " 条");
-              }
-          } catch (NumberFormatException e) {
-              System.out.println("✗ 用法: !<序号>  例: !3 执行第 3 条历史命令");
-          }
-      }
+     private void handleBang(String cmd) {
+         String numStr = cmd.substring(1);
+         try {
+             int n = Integer.parseInt(numStr);
+             List<String> history = consoleReader.getHistory();
+             if (n >= 1 && n <= history.size()) {
+                 int index = history.size() - n;
+                 String prevCmd = history.get(index);
+                 System.out.println("  " + prevCmd);
+                 processInput(prevCmd);
+             } else {
+                 System.out.println("✗ 历史索引超出范围，共 " + history.size() + " 条");
+             }
+         } catch (NumberFormatException e) {
+             System.out.println("✗ 用法: !<序号>  例: !3 执行第 3 条历史命令");
+         }
+     }
 
-      private void handleHistory() {
-          List<String> history = consoleReader.getHistory();
-          if (history.isEmpty()) {
-              System.out.println("  (暂无历史命令)");
-          } else {
-              System.out.println("  最近 " + history.size() + " 条命令:");
-              int start = Math.max(0, history.size() - 50);
-              for (int i = start; i < history.size(); i++) {
-                  System.out.printf("  %4d  %s%n", i + 1, history.get(i));
-              }
-          }
-      }
+     private void handleHistory() {
+         List<String> history = consoleReader.getHistory();
+         if (history.isEmpty()) {
+             System.out.println("  (暂无历史命令)");
+         } else {
+             System.out.println("  最近 " + history.size() + " 条命令:");
+             int start = Math.max(0, history.size() - 50);
+             for (int i = history.size() - 1; i >= start; i--) {
+                 System.out.printf("  %4d  %s%n", history.size() - i, history.get(i));
+             }
+         }
+     }
      
      private void clearScreen() {
          System.out.print("\033[H\033[2J");

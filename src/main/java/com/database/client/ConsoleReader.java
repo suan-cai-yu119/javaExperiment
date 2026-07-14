@@ -24,7 +24,7 @@ public class ConsoleReader implements Closeable {
         String line = reader.readLine();
         if (line != null) {
             String trimmed = line.trim();
-            if (!trimmed.isEmpty()) {
+            if (!trimmed.isEmpty() && !trimmed.matches("^!\\d+$")) {
                 cmdHistory.add(trimmed);
                 if (cmdHistory.size() > 1000) cmdHistory.remove(0);
             }
