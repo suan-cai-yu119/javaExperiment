@@ -92,19 +92,20 @@
      /**
       * 停止服务器
       */
-     public void stop() {
-         running = false;
-         threadPool.shutdown();
-         try {
-             if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
-                 threadPool.shutdownNow();
-             }
-         } catch (InterruptedException e) {
-             threadPool.shutdownNow();
-             Thread.currentThread().interrupt();
-         }
-         System.out.println("\n✓ 服务器已安全关闭");
-     }
+      public void stop() {
+          running = false;
+          threadPool.shutdown();
+          try {
+              if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
+                  threadPool.shutdownNow();
+              }
+          } catch (InterruptedException e) {
+              threadPool.shutdownNow();
+              Thread.currentThread().interrupt();
+          }
+          database.shutdown();
+          System.out.println("\n✓ 服务器已安全关闭");
+      }
      
      public static void main(String[] args) {
          int port = Protocol.DEFAULT_PORT;
