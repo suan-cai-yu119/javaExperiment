@@ -61,11 +61,19 @@ import com.database.core.Database;
               System.out.println("✓ 支持最大客户端连接数: " + Protocol.MAX_CONNECTIONS);
               
               // 自动恢复数据（扫描 data/ 目录，加载所有数据库 + WAL回放）
-              System.out.println("✓ 正在自动恢复持久化数据...");
-              Response recoveryResp = database.autoLoadDatabases();
-              System.out.println("  " + recoveryResp.getMessage());
-              
-              System.out.println("✓ 等待客户端连接...\n");
+               System.out.println("✓ 正在自动恢复持久化数据...");
+               Response recoveryResp = database.autoLoadDatabases();
+               System.out.println("  " + recoveryResp.getMessage());
+               
+               // 启动 HTTP RESTful API 服务器
+               try {
+                   HttpApiServer httpApi = new HttpApiServer(database);
+                   httpApi.start();
+               } catch (IOException e) {
+                   System.err.println("? HTTP API 服务器启动失败: " + e.getMessage());
+               }
+               
+               System.out.println("✓ 等待客户端连接...\n");
               
               // 关闭钩子，确保优雅关闭
               Runtime.getRuntime().addShutdownHook(new Thread(this::stop));

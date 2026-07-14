@@ -58,11 +58,11 @@ public class ConsoleUI {
         return "\nmini-db> ";
     }
      
-     /**
-      * 解析并执行用户输入
-      * 体现了：反射（命令分发）、注解处理的思路
-      */
-      private void processInput(String input) {
+      /**
+       * 解析并执行用户输入
+       * 体现了：反射（命令分发）、注解处理的思路
+       */
+       public void processInput(String input) {
           String[] parts = parseInput(input);
           if (parts.length == 0) return;
           
