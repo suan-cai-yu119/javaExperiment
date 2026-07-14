@@ -25,9 +25,14 @@
       BATCH_PUT,
       BATCH_UPDATE,
      
-     // 持久化
-     SAVE,
-     LOAD,
+      // 索引
+      CREATE_INDEX,
+      DROP_INDEX,
+      LIST_INDEXES,
+
+      // 持久化
+      SAVE,
+      LOAD,
      
      // 集群管理
      CLUSTER_JOIN,

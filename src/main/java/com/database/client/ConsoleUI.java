@@ -92,9 +92,14 @@ public class ConsoleUI {
               // 批量操作
               case "BATCH", "B" -> handleBatch(args);
 
-              // 持久化
-              case "SAVE", "SV" -> handleSave(args);
-              case "LOAD", "LD" -> handleLoad(args);
+               // 索引
+               case "CREATE" -> handleCreate(args);
+               case "DROP" -> handleDrop(args);
+               case "LIST" -> handleList(args);
+
+               // 持久化
+               case "SAVE", "SV" -> handleSave(args);
+               case "LOAD", "LD" -> handleLoad(args);
              
               // 系统
               case "HELP", "H", "?" -> printHelp();
@@ -107,43 +112,61 @@ public class ConsoleUI {
          }
      }
      
-      private void handleCreate(String[] args) {
-          if (args.length < 2) {
-              System.out.println("✗ 用法: CREATE DATABASE|COLLECTION|TABLE <name>");
-              return;
-          }
-          String type = args[0].toUpperCase();
-          String name = args[1];
-          Response resp;
-          if ("DATABASE".equals(type) || "DB".equals(type)) {
-              resp = client.sendCommand(CommandType.CREATE_DATABASE, name);
-          } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
-              resp = client.sendCommand(CommandType.CREATE_COLLECTION, name);
-          } else {
-              System.out.println("✗ 类型错误: " + type);
-              return;
-          }
-          printResponse(resp);
-      }
+       private void handleCreate(String[] args) {
+           if (args.length < 2) {
+               System.out.println("✗ 用法: CREATE DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
+               return;
+           }
+           String type = args[0].toUpperCase();
+           String name = args[1];
+           Response resp;
+           if ("DATABASE".equals(type) || "DB".equals(type)) {
+               resp = client.sendCommand(CommandType.CREATE_DATABASE, name);
+           } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
+               resp = client.sendCommand(CommandType.CREATE_COLLECTION, name);
+           } else if ("INDEX".equals(type) || "IDX".equals(type)) {
+               if (args.length < 3) {
+                   System.out.println("✗ 用法: CREATE INDEX <collection> <field>");
+                   return;
+               }
+               Request req = new Request(CommandType.CREATE_INDEX);
+               req.setCollectionName(name);
+               req.setKey(args[2]);
+               resp = client.sendRequest(req);
+           } else {
+               System.out.println("✗ 类型错误: " + type);
+               return;
+           }
+           printResponse(resp);
+       }
      
-      private void handleDrop(String[] args) {
-          if (args.length < 2) {
-              System.out.println("✗ 用法: DROP DATABASE|COLLECTION|TABLE <name>");
-              return;
-          }
-          String type = args[0].toUpperCase();
-          String name = args[1];
-          Response resp;
-          if ("DATABASE".equals(type) || "DB".equals(type)) {
-              resp = client.sendCommand(CommandType.DROP_DATABASE, name);
-          } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
-              resp = client.sendCommand(CommandType.DROP_COLLECTION, name);
-          } else {
-              System.out.println("✗ 类型错误: " + type);
-              return;
-          }
-          printResponse(resp);
-      }
+       private void handleDrop(String[] args) {
+           if (args.length < 2) {
+               System.out.println("✗ 用法: DROP DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
+               return;
+           }
+           String type = args[0].toUpperCase();
+           String name = args[1];
+           Response resp;
+           if ("DATABASE".equals(type) || "DB".equals(type)) {
+               resp = client.sendCommand(CommandType.DROP_DATABASE, name);
+           } else if ("COLLECTION".equals(type) || "COL".equals(type) || "TABLE".equals(type) || "TBL".equals(type)) {
+               resp = client.sendCommand(CommandType.DROP_COLLECTION, name);
+           } else if ("INDEX".equals(type) || "IDX".equals(type)) {
+               if (args.length < 3) {
+                   System.out.println("✗ 用法: DROP INDEX <collection> <field>");
+                   return;
+               }
+               Request req = new Request(CommandType.DROP_INDEX);
+               req.setCollectionName(name);
+               req.setKey(args[2]);
+               resp = client.sendRequest(req);
+           } else {
+               System.out.println("✗ 类型错误: " + type);
+               return;
+           }
+           printResponse(resp);
+       }
 
       private void handleList(String[] args) {
           if (args.length == 0) {
@@ -165,22 +188,42 @@ public class ConsoleUI {
                       }
                   }
               }
-          } else if ("COLLECTIONS".equals(type) || "COLS".equals(type) || "TABLES".equals(type) || "TBL".equals(type)) {
-              resp = client.sendCommand(CommandType.LIST_COLLECTIONS);
-              printResponse(resp);
-              if (resp.isSuccess() && resp.getData() instanceof Set<?> collections) {
-                  if (collections.isEmpty()) {
-                      System.out.println("  (当前数据库中没有集合，请使用 CREATE COLLECTION 创建)");
-                  } else {
-                      System.out.println("  集合列表:");
-                      for (Object col : collections) {
-                          System.out.println("    - " + col);
-                      }
-                  }
-              }
-          } else {
-              System.out.println("✗ 类型错误: " + type);
-          }
+           } else if ("COLLECTIONS".equals(type) || "COLS".equals(type) || "TABLES".equals(type) || "TBL".equals(type)) {
+               resp = client.sendCommand(CommandType.LIST_COLLECTIONS);
+               printResponse(resp);
+               if (resp.isSuccess() && resp.getData() instanceof Set<?> collections) {
+                   if (collections.isEmpty()) {
+                       System.out.println("  (当前数据库中没有集合，请使用 CREATE COLLECTION 创建)");
+                   } else {
+                       System.out.println("  集合列表:");
+                       for (Object col : collections) {
+                           System.out.println("    - " + col);
+                       }
+                   }
+               }
+           } else if ("INDEXES".equals(type) || "IDX".equals(type)) {
+               if (args.length < 2) {
+                   System.out.println("✗ 用法: LIST INDEXES <collection>");
+                   return;
+               }
+               String colName = args[1];
+               Request req = new Request(CommandType.LIST_INDEXES);
+               req.setCollectionName(colName);
+               resp = client.sendRequest(req);
+               printResponse(resp);
+               if (resp.isSuccess() && resp.getData() instanceof Set<?> indexes) {
+                   if (indexes.isEmpty()) {
+                       System.out.println("  (该集合没有索引)");
+                   } else {
+                       System.out.println("  索引列表:");
+                       for (Object idx : indexes) {
+                           System.out.println("    - " + idx);
+                       }
+                   }
+               }
+           } else {
+               System.out.println("✗ 类型错误: " + type);
+           }
       }
 
      private void handleUse(String[] args) {
@@ -635,11 +678,16 @@ public class ConsoleUI {
                   ║    BATCH UPDATE <c> <k1> f:v...      <k2>... 批量更新║
                   ║    UPDATE <c> WHERE f=v sf:sv...   条件批量更新    ║
                   ║                                                    ║
-                  ║  持久化:                                            ║
-                 ║    SAVE                      保存数据               ║
-                 ║    LOAD [dbname]             加载数据               ║
-                 ║                                                    ║
-                 ║  系统:                                              ║
+                   ║  索引:                                              ║
+                   ║    CREATE INDEX <col> <f>    创建索引（加速WHERE）    ║
+                   ║    DROP INDEX <col> <f>      删除索引                ║
+                   ║    LIST INDEXES <col>        查看索引列表            ║
+                   ║                                                    ║
+                   ║  持久化:                                            ║
+                  ║    SAVE                      保存数据               ║
+                  ║    LOAD [dbname]             加载数据               ║
+                  ║                                                    ║
+                  ║  系统:                                              ║
                  ║    HELP                      显示帮助               ║
                  ║    PING                      心跳检测               ║
                   ║    QUIT                      退出                   ║

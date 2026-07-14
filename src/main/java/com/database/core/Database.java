@@ -183,12 +183,17 @@ public class Database {
           Collection_ col = getCollection(collection);
           if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
           List<String> toDelete = new ArrayList<>();
-          for (KV kv : col.scan()) {
-              Object val = kv.getValue();
-              if (val instanceof Map<?, ?> map) {
-                  Object fieldVal = map.get(field);
-                  if (Objects.equals(fieldVal, value)) {
-                      toDelete.add(kv.getKey());
+          Set<String> indexed = col.hasIndex(field) ? col.lookupIndex(field, value) : null;
+          if (indexed != null) {
+              toDelete.addAll(indexed);
+          } else {
+              for (KV kv : col.scan()) {
+                  Object val = kv.getValue();
+                  if (val instanceof Map<?, ?> map) {
+                      Object fieldVal = map.get(field);
+                      if (Objects.equals(fieldVal, value)) {
+                          toDelete.add(kv.getKey());
+                      }
                   }
               }
           }
@@ -266,22 +271,56 @@ public class Database {
           WalWriter wal = getWal();
           Collection_ col = getCollection(collection);
           if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
-          int count = 0;
-          for (KV kv : col.scan()) {
-              Object val = kv.getValue();
-              if (val instanceof Map<?, ?> map) {
-                  Object fieldVal = map.get(field);
-                  if (Objects.equals(fieldVal, value)) {
-                      if (wal != null) wal.logUpdate(collection, kv.getKey(), updateData);
-                      col.update(kv.getKey(), updateData);
-                      count++;
+          Set<String> keysToUpdate;
+          Set<String> indexed = col.hasIndex(field) ? col.lookupIndex(field, value) : null;
+          if (indexed != null) {
+              keysToUpdate = indexed;
+          } else {
+              keysToUpdate = new LinkedHashSet<>();
+              for (KV kv : col.scan()) {
+                  Object val = kv.getValue();
+                  if (val instanceof Map<?, ?> map) {
+                      Object fieldVal = map.get(field);
+                      if (Objects.equals(fieldVal, value)) {
+                          keysToUpdate.add(kv.getKey());
+                      }
                   }
               }
           }
-          if (count == 0) {
+          if (keysToUpdate.isEmpty()) {
               return Response.fail("没有匹配的记录");
           }
-          return Response.ok("批量更新成功，共更新 " + count + " 条记录");
+          for (String key : keysToUpdate) {
+              if (wal != null) wal.logUpdate(collection, key, updateData);
+              col.update(key, updateData);
+          }
+          return Response.ok("批量更新成功，共更新 " + keysToUpdate.size() + " 条记录");
+      }
+
+      public Response createIndex(String collection, String field) {
+          if (collection == null || field == null) return Response.fail("参数不能为空");
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          boolean ok = col.createIndex(field);
+          if (!ok) return Response.fail("字段 '" + field + "' 已有索引");
+          return Response.ok("在集合 '" + collection + "' 的字段 '" + field + "' 上创建索引成功");
+      }
+
+      public Response dropIndex(String collection, String field) {
+          if (collection == null || field == null) return Response.fail("参数不能为空");
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          boolean ok = col.dropIndex(field);
+          if (!ok) return Response.fail("字段 '" + field + "' 上没有索引");
+          return Response.ok("删除索引成功");
+      }
+
+      public Response listIndexes(String collection) {
+          if (collection == null) return Response.fail("参数不能为空");
+          Collection_ col = getCollection(collection);
+          if (col == null) return Response.fail("集合 '" + collection + "' 不存在");
+          Set<String> indexes = col.listIndexes();
+          return Response.ok("索引列表: " + indexes, indexes);
       }
      
     // ========== 持久化 ==========
