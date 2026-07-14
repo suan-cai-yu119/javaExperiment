@@ -75,9 +75,7 @@ public class ClusterReplicator {
                     Socket s = new Socket(masterHost, masterPort);
                     LOG.info("TCP 连接成功，创建 ObjectStream...");
                     ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
-                    LOG.info("ObjectOutputStream 创建完成，发送 REGISTER...");
-                    ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
-                    ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+                    oos.flush();
                     ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
 
                     ClusterNode self = clusterManager.getSelf();
@@ -237,12 +235,13 @@ public class ClusterReplicator {
             LOG.info("从节点 TCP 连接已建立: " + socket.getRemoteSocketAddress());
             ScheduledExecutorService heartbeater = null;
             try {
+                oos = new ObjectOutputStream(socket.getOutputStream());
+                oos.flush();
                 ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
                 ClusterMessage reg = (ClusterMessage) ois.readObject();
                 if (reg.getType() == ClusterMessage.Type.REGISTER) {
                     ClusterNode slaveNode = reg.getDataAs();
                     clusterManager.addNode(slaveNode);
-                    oos = new ObjectOutputStream(socket.getOutputStream());
                     // 回复全量节点列表，让新节点知道集群中所有节点
                     List<ClusterNode> allNodes = clusterManager.getAllNodes();
                     LOG.info("REGISTERED data type=" + allNodes.getClass().getName()
