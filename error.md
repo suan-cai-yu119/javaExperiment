@@ -300,6 +300,10 @@ public KV put(String key, Object value) {
 - 实现：`ConsoleReader` 使用 `BufferedReader` 读取输入，`ArrayList` 维护历史。支持中文输入。
 - 修改 `client/ConsoleReader.java`、`client/ConsoleUI.java`（添加 `handleHistory`、`handleBang`）
 
+### support4:在put的时候有key:value，然后where条件有key=value，有些混乱，可以让where的也是用:
+
+### support5:历史记录倒叙，最新的命令在最前面
+
 ### doc-put:PUT 改为文档式（兼容 MySQL 行概念）
 - 说明：`PUT students s001 name:小明 age:18` 将多个字段作为 Map 存入，同 key 再次 PUT 时合并字段（新增/覆盖）。SCAN 显示为表格。
 - 改动：
