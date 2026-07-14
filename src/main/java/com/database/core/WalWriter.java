@@ -17,23 +17,24 @@ public class WalWriter {
     public WalWriter(String dbName) {
         this.dbName = dbName;
         this.walPath = Paths.get(WAL_DIR, dbName, "wal", WAL_FILE);
-        init();
-    }
-
-    private void init() {
         try {
-            Files.createDirectories(walPath.getParent());
-            if (Files.size(walPath) > 0) {
-                oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile(), true)) {
-                    protected void writeStreamHeader() {}
-                };
-            } else {
-                oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile()));
-            }
+            init();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to initialize WAL writer for database: " + dbName, e);
         }
     }
+
+    private void init() throws IOException {
+        Files.createDirectories(walPath.getParent());
+        if (Files.exists(walPath) && Files.size(walPath) > 0) {
+            oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile(), true)) {
+                protected void writeStreamHeader() {}
+            };
+        } else {
+            oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile()));
+        }
+    }
+
 
     public void logPut(String collection, String key, Object value) {
         write(new WalEntry("PUT", collection, key, value, System.currentTimeMillis()));
@@ -50,6 +51,10 @@ public class WalWriter {
     private void write(WalEntry entry) {
         lock.lock();
         try {
+            if (oos == null) {
+                System.err.println("WAL writer is not initialized for database: " + dbName);
+                return;
+            }
             oos.writeObject(entry);
             oos.flush();
             oos.reset();
@@ -91,11 +96,15 @@ public class WalWriter {
     public void truncate() {
         lock.lock();
         try {
-            if (oos != null) oos.close();
+            if (oos != null) {
+                oos.close();
+            }
+            Files.createDirectories(walPath.getParent());
             Files.writeString(walPath, "");
             oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile()));
         } catch (IOException e) {
             System.err.println("WAL truncate error: " + e.getMessage());
+            oos = null;
         } finally {
             lock.unlock();
         }

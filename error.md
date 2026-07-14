@@ -286,6 +286,45 @@ public KV put(String key, Object value) {
 }
 ```
 
+### bug8:delete表删除最后一个元素的的时候运行时错误
+- 原因：truncate() 方法在第 99 行关闭了 oos，然后在第 101 行尝试重新创建。但如果第 101 行抛出异常，oos 就会是 null。即使没有异常，如果文件路径不存在或其他问题，也会导致后续操作失败
+- 修复：在 init() 方法初始化失败时抛出异常，在 write() 方法中添加 null 检查。
+- 修改`WalWriter.java`的`truncate()`方法
+```java
+//修改前
+public void truncate() {
+  lock.lock();
+  try {
+    if (oos != null) oos.close();
+    Files.writeString(walPath, "");
+    oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile()));
+  } catch (IOException e) {
+    System.err.println("WAL truncate error: " + e.getMessage());
+    oos = null;
+  } finally {
+    lock.unlock();
+  }
+}
+//修改后
+public void truncate() {
+  lock.lock();
+  try {
+    if (oos != null) {
+      oos.close();
+    }
+    Files.createDirectories(walPath.getParent());
+    Files.writeString(walPath, "");
+    oos = new ObjectOutputStream(new FileOutputStream(walPath.toFile()));
+  } catch (IOException e) {
+    System.err.println("WAL truncate error: " + e.getMessage());
+    oos = null;
+  } finally {
+    lock.unlock();
+  }
+}
+```
+
+
 ### support1:在 mini-db 提示符前显示当前数据库名
 - 说明：使用 `USE DATABASE <name>` 切换到某个数据库后，提示符会变为 `<name> mini-db>`，提示当前所在数据库。
 - 实现：`ConsoleUI` 增加 `currentDb` 字段记录当前数据库，`handleUse()` 在 `USE` 成功后更新该字段，`buildPrompt()` 据此生成提示符。
