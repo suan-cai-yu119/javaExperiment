@@ -1,10 +1,6 @@
 @echo off
 chcp 65001 >nul 2>&1
-title MiniDB Cluster
-
-echo ===================== MiniDB Cluster =====================
-echo Starting 3 nodes equally - cluster will auto-elect master.
-echo.
+title MiniDB Node Launcher
 
 set "CLUSTER_PEERS=127.0.0.1:9527,127.0.0.1:9528,127.0.0.1:9529"
 set "JAR_PATH=target\mini-database-1.0.0.jar"
@@ -15,42 +11,28 @@ if not exist "%JAR_PATH%" (
     exit /b 1
 )
 
-echo [1/3] Starting node 9527 ...
-start "Node-9527" cmd /c "java -jar "%JAR_PATH%" 9527 --cluster --peers %CLUSTER_PEERS% ^& pause"
-
-timeout /t 2 /nobreak >nul
-
-echo [2/3] Starting node 9528 ...
-start "Node-9528" cmd /c "java -jar "%JAR_PATH%" 9528 --cluster --peers %CLUSTER_PEERS% ^& pause"
-
-timeout /t 2 /nobreak >nul
-
-echo [3/3] Starting node 9529 ...
-start "Node-9529" cmd /c "java -jar "%JAR_PATH%" 9529 --cluster --peers %CLUSTER_PEERS% ^& pause"
-
+:start
+cls
+echo ===================== MiniDB Node Launcher =====================
 echo.
-echo ============================================================
-echo All 3 nodes started in separate windows.
-echo Cluster is electing master/slave automatically.
+echo This tool starts one cluster node at a time.
+echo Run it multiple times to start multiple nodes.
+echo Cluster peers: %CLUSTER_PEERS%
 echo.
 
-:menu
+set /p PORT="Enter port [9527]: "
+if "%PORT%"=="" set PORT=9527
+
+start "Node-%PORT%" cmd /c "java -jar "%JAR_PATH%" %PORT% --cluster --peers %CLUSTER_PEERS% ^& pause"
+
+echo.
+echo [OK] Node %PORT% started in a new window.
+echo.
 echo Choose action:
-echo   1. Start client (cluster selection mode)
-echo   2. Direct connection to node 9527
-echo   3. Exit
+echo   1. Start another node
+echo   2. Exit
 echo.
-set /p choice="Enter 1/2/3: "
+set /p choice="Enter 1/2: "
 
-if "%choice%"=="1" (
-    start "Client" cmd /c "java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9527 --cluster ^& pause"
-    goto menu
-)
-if "%choice%"=="2" (
-    start "Client" cmd /c "java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9527 ^& pause"
-    goto menu
-)
-if "%choice%"=="3" exit /b
-
-echo Invalid option
-goto menu
+if "%choice%"=="1" goto start
+exit /b
