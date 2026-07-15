@@ -1,3 +1,10 @@
 @echo off
-chcp 65001 >nul 2>&1
-java -jar "target\mini-database-1.0.0.jar" 9528 --cluster --role slave --master-host 127.0.0.1 --master-port 9527
+chcp 65001 >nul
+echo.
+echo ======================================================
+echo  注意: 已不再需要区分主节点和从节点！
+echo  所有节点平等启动，集群内部自动选举主从。
+echo  请使用 startup.bat 启动集群。
+echo ======================================================
+echo.
+pause

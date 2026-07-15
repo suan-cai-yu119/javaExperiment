@@ -2,9 +2,10 @@
  
  import com.database.common.*;
  
- import java.io.*;
- import java.net.Socket;
- import java.util.logging.Logger;
+import java.io.*;
+import java.net.Socket;
+import java.util.Map;
+import java.util.logging.Logger;
  
  /**
   * 数据库客户端 - 连接到服务器的终端客户端
@@ -92,5 +93,39 @@
          connected = false;
      }
      
-     public boolean isConnected() { return connected; }
- }
+    public boolean isConnected() { return connected; }
+
+    public static long measureLatency(String host, int port) {
+        long start = System.nanoTime();
+        try (Socket s = new Socket(host, port);
+             ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+             ObjectInputStream ois = new ObjectInputStream(s.getInputStream())) {
+            s.setSoTimeout(Protocol.TIMEOUT);
+            oos.writeObject(new Request(CommandType.PING));
+            oos.flush();
+            ois.readObject();
+            return System.nanoTime() - start;
+        } catch (IOException | ClassNotFoundException e) {
+            return -1;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> fetchClusterStatus(String host, int port) {
+        try (Socket s = new Socket(host, port);
+             ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
+             ObjectInputStream ois = new ObjectInputStream(s.getInputStream())) {
+            s.setSoTimeout(Protocol.TIMEOUT);
+            ois.readObject();
+            oos.writeObject(new Request(CommandType.CLUSTER_STATUS));
+            oos.flush();
+            Response resp = (Response) ois.readObject();
+            if (resp.isSuccess() && resp.getData() instanceof Map) {
+                return (Map<String, Object>) resp.getData();
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("✗ 获取集群状态失败: " + e.getMessage());
+        }
+        return null;
+    }
+}

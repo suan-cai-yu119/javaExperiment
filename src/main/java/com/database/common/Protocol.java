@@ -36,6 +36,9 @@
      /** HTTP API 端口偏移量（clientPort + OFFSET） */
      public static final int HTTP_PORT_OFFSET = 2000;
 
-     /** 集群内部通信端口偏移量（clientPort + OFFSET） */
-     public static final int CLUSTER_PORT_OFFSET = 10000;
+      /** 集群内部通信端口偏移量（clientPort + OFFSET） */
+      public static final int CLUSTER_PORT_OFFSET = 10000;
+
+      /** 集群通信超时（毫秒） */
+      public static final int CLUSTER_TIMEOUT = 3000;
  }

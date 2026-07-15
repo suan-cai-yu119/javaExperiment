@@ -52,20 +52,21 @@ public class Server {
       /**
        * 启动服务器
        */
-      public void start(String[] args) {
-          System.out.println("╔═══════════════════════════════════════════╗");
-          System.out.println("║    迷你数据库系统 v" + Protocol.VERSION + "                    ║");
-          System.out.println("║    正在启动服务器...                      ║");
-          System.out.println("╚═══════════════════════════════════════════╝");
-          
-          boolean clusterMode = false;
-          for (String a : args) {
-              if ("--cluster".equals(a)) { clusterMode = true; break; }
-          }
-          if (clusterMode) {
-              clusterManager = new ClusterManager(database);
-              clusterManager.enableCluster(port, args);
-          }
+       public void start(String[] args) {
+           System.out.println("╔═══════════════════════════════════════════╗");
+           System.out.println("║    迷你数据库系统 v" + Protocol.VERSION + "                    ║");
+           System.out.println("║    正在启动服务器...                      ║");
+           System.out.println("╚═══════════════════════════════════════════╝");
+
+           boolean clusterMode = false;
+           for (String a : args) {
+               if ("--cluster".equals(a)) { clusterMode = true; break; }
+           }
+           if (clusterMode) {
+               clusterManager = new ClusterManager(database);
+               clusterManager.enableCluster(port, args);
+               System.out.println("✓ 集群模式已启用（内部自动选举主从）");
+           }
           
            try (ServerSocket serverSocket = new ServerSocket(port)) {
                System.out.println("✓ 服务器已启动，监听端口: " + port);

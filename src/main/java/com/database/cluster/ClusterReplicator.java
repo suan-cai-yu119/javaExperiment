@@ -223,6 +223,35 @@ public class ClusterReplicator {
         }
     }
 
+    public boolean isRunning() {
+        return running;
+    }
+
+    public static void exchangeNodes(Socket socket, ClusterManager clusterManager,
+                                     String selfId, String selfHost, int selfPort) throws Exception {
+        ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
+        oos.flush();
+        ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
+
+        ClusterNode self = clusterManager.getSelf();
+        oos.writeObject(new ClusterMessage(ClusterMessage.Type.REGISTER,
+                new ClusterNode(selfId, selfHost, selfPort), selfId));
+        oos.flush();
+
+        Object resp = ois.readObject();
+        if (resp instanceof ClusterMessage msg
+                && msg.getType() == ClusterMessage.Type.REGISTERED) {
+            Object rawData = msg.getData();
+            if (rawData instanceof List<?> nodeList) {
+                for (Object n : nodeList) {
+                    if (n instanceof ClusterNode cn) {
+                        clusterManager.addNode(cn);
+                    }
+                }
+            }
+        }
+    }
+
     public void stop() {
         running = false;
         for (SlaveConnection sc : slaves) sc.close();
