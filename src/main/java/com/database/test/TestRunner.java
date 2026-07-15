@@ -42,20 +42,20 @@
      static void assertEq(Object expected, Object actual, String testName) {
          if (Objects.equals(expected, actual)) {
              passed++;
-             System.out.println("  ✓ " + testName);
+             System.out.println("  [OK] " + testName);
          } else {
              failed++;
-             System.out.println("  ✗ " + testName + " (期望: " + expected + ", 实际: " + actual + ")");
+             System.out.println("  [x] " + testName + " (期望: " + expected + ", 实际: " + actual + ")");
          }
      }
      
      static void assertTrue(boolean condition, String testName) {
          if (condition) {
              passed++;
-             System.out.println("  ✓ " + testName);
+             System.out.println("  [OK] " + testName);
          } else {
              failed++;
-             System.out.println("  ✗ " + testName);
+             System.out.println("  [x] " + testName);
          }
      }
      
@@ -151,10 +151,10 @@
              assertEq("value1", loaded.get("k1").getValue(), "反序列化后 k1 的值应正确");
              
              new File(tempFile).delete();
-             System.out.println("  ✓ 序列化/反序列化测试通过");
+             System.out.println("  [OK] 序列化/反序列化测试通过");
          } catch (Exception e) {
              failed++;
-             System.out.println("  ✗ 序列化测试异常: " + e.getMessage());
+             System.out.println("  [x] 序列化测试异常: " + e.getMessage());
          }
      }
      
@@ -194,10 +194,10 @@
                  db.scan("threads").getData() instanceof List<?> list ? list.size() : 0, 
                  "多线程写入总数应正确");
              
-             System.out.println("  ✓ 多线程压力测试通过 (" + (threadCount * opsPerThread) + " 次操作)");
+             System.out.println("  [OK] 多线程压力测试通过 (" + (threadCount * opsPerThread) + " 次操作)");
          } catch (Exception e) {
              failed++;
-             System.out.println("  ✗ 多线程测试异常: " + e.getMessage());
+             System.out.println("  [x] 多线程测试异常: " + e.getMessage());
          }
      }
      

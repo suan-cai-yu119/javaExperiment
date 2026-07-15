@@ -94,11 +94,11 @@ public class ClusterReplicator {
 
                     oos.writeObject(regMsg);
                     oos.flush();
-                    LOG.info("✓ REGISTER 消息已发送");
+                    LOG.info("[OK] REGISTER 消息已发送");
 
                     Object resp = ois.readObject();
                     if (resp instanceof ClusterMessage msg && msg.getType() == ClusterMessage.Type.REGISTERED) {
-                        LOG.info("✓ 已收到主节点的 REGISTERED 响应");
+                        LOG.info("[OK] 已收到主节点的 REGISTERED 响应");
                         Object rawData = msg.getData();
                         LOG.info("REGISTERED data type=" + rawData.getClass().getName()
                                 + ", isList=" + (rawData instanceof List)
@@ -108,7 +108,7 @@ public class ClusterReplicator {
                         LOG.info("同步前节点数: " + beforeCount);
 
                         if (rawData instanceof List<?> nodeList) {
-                            LOG.info("✓ 收到完整节点列表，数量: " + nodeList.size());
+                            LOG.info("[OK] 收到完整节点列表，数量: " + nodeList.size());
                             for (Object n : nodeList) {
                                 if (n instanceof ClusterNode cn) {
                                     LOG.info("  添加节点: " + cn.getNodeId() + " (" + cn.getHost() + ":" + cn.getPort() + ") [" + cn.getRole() + "]");
@@ -121,7 +121,7 @@ public class ClusterReplicator {
                         }
 
                         int afterCount = clusterManager.getAllNodes().size();
-                        LOG.info("✓ 同步后节点数: " + afterCount + " (增加了 " + (afterCount - beforeCount) + " 个)");
+                        LOG.info("[OK] 同步后节点数: " + afterCount + " (增加了 " + (afterCount - beforeCount) + " 个)");
 
                         LOG.info("当前已知的所有节点:");
                         for (ClusterNode node : clusterManager.getAllNodes()) {
@@ -298,7 +298,7 @@ public class ClusterReplicator {
 
                 LOG.info("等待接收 REGISTER 消息...");
                 ClusterMessage reg = (ClusterMessage) ois.readObject();
-                LOG.info("✓ 收到消息，类型: " + reg.getType());
+                LOG.info("[OK] 收到消息，类型: " + reg.getType());
 
                 if (reg.getType() == ClusterMessage.Type.REGISTER) {
                     ClusterNode slaveNode = reg.getDataAs();
@@ -309,8 +309,8 @@ public class ClusterReplicator {
                     LOG.info("  角色: " + slaveNode.getRole());
 
                     clusterManager.addNode(slaveNode);
-                    LOG.info("✓ 从节点已添加到集群管理器");
-                    LOG.info("✓ 当前集群节点总数: " + clusterManager.getAllNodes().size());
+                    LOG.info("[OK] 从节点已添加到集群管理器");
+                    LOG.info("[OK] 当前集群节点总数: " + clusterManager.getAllNodes().size());
 
                     List<ClusterNode> allNodes = clusterManager.getAllNodes();
                     LOG.info("准备发送节点列表给新从节点:");
@@ -324,7 +324,7 @@ public class ClusterReplicator {
                     LOG.info("发送 REGISTERED 消息...");
                     oos.writeObject(registeredMsg);
                     oos.flush();
-                    LOG.info("✓ 已发送 REGISTERED 消息（包含 " + allNodes.size() + " 个节点）");
+                    LOG.info("[OK] 已发送 REGISTERED 消息（包含 " + allNodes.size() + " 个节点）");
 
                     List<ClusterNode> broadcastNodes = clusterManager.getAllNodes();
                     LOG.info("准备广播 NODE_LIST 给其他从节点:");
@@ -340,9 +340,9 @@ public class ClusterReplicator {
                             sentCount++;
                         }
                     }
-                    LOG.info("✓ NODE_LIST 广播完成 (发送给 " + sentCount + " 个从节点)");
+                    LOG.info("[OK] NODE_LIST 广播完成 (发送给 " + sentCount + " 个从节点)");
 
-                    System.out.println("✓ 从节点已加入集群: " + slaveNode.getNodeId());
+                    System.out.println("[OK] 从节点已加入集群: " + slaveNode.getNodeId());
                 } else {
                     LOG.warning("⚠ 收到的消息类型不是 REGISTER: " + reg.getType());
                 }

@@ -65,16 +65,16 @@ public class Server {
            if (clusterMode) {
                clusterManager = new ClusterManager(database);
                clusterManager.enableCluster(port, args);
-               System.out.println("✓ 集群模式已启用（内部自动选举主从）");
+               System.out.println("[OK] 集群模式已启用（内部自动选举主从）");
            }
           
            try (ServerSocket serverSocket = new ServerSocket(port)) {
-               System.out.println("✓ 服务器已启动，监听端口: " + port);
-               if (clusterMode) System.out.println("✓ 集群模式已启用");
-               System.out.println("✓ 支持最大客户端连接数: " + Protocol.MAX_CONNECTIONS);
+               System.out.println("[OK] 服务器已启动，监听端口: " + port);
+               if (clusterMode) System.out.println("[OK] 集群模式已启用");
+               System.out.println("[OK] 支持最大客户端连接数: " + Protocol.MAX_CONNECTIONS);
                
                // 自动恢复数据（扫描 data/ 目录，加载所有数据库 + WAL回放）
-                System.out.println("✓ 正在自动恢复持久化数据...");
+                System.out.println("[OK] 正在自动恢复持久化数据...");
                 Response recoveryResp = database.autoLoadDatabases();
                 System.out.println("  " + recoveryResp.getMessage());
                 
@@ -88,7 +88,7 @@ public class Server {
                    System.err.println("  提示：端口 " + (port + Protocol.HTTP_PORT_OFFSET) + " 可能被占用");
                }
                 
-                System.out.println("✓ 等待客户端连接...\n");
+                System.out.println("[OK] 等待客户端连接...\n");
                
                // 关闭钩子，确保优雅关闭
                Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
@@ -108,12 +108,12 @@ public class Server {
                       
                   } catch (IOException e) {
                       if (running) {
-                          System.err.println("✗ 接受客户端连接失败: " + e.getMessage());
+                          System.err.println("[x] 接受客户端连接失败: " + e.getMessage());
                       }
                   }
               }
           } catch (IOException e) {
-              System.err.println("✗ 服务器启动失败: " + e.getMessage());
+              System.err.println("[x] 服务器启动失败: " + e.getMessage());
           } finally {
               stop();
           }
@@ -135,7 +135,7 @@ public class Server {
                Thread.currentThread().interrupt();
            }
            database.shutdown();
-           System.out.println("\n✓ 服务器已安全关闭");
+           System.out.println("\n[OK] 服务器已安全关闭");
        }
       
       public static void main(String[] args) {

@@ -40,12 +40,12 @@ import java.util.logging.Logger;
              
              // 读取欢迎信息
              Response welcome = (Response) ois.readObject();
-             System.out.println("✓ " + welcome.getMessage());
+             System.out.println("[OK] " + welcome.getMessage());
              
              connected = true;
              return true;
          } catch (IOException | ClassNotFoundException e) {
-             System.err.println("✗ 连接服务器失败: " + e.getMessage());
+             System.err.println("[x] 连接服务器失败: " + e.getMessage());
              return false;
          }
      }
@@ -124,7 +124,7 @@ import java.util.logging.Logger;
                 return (Map<String, Object>) resp.getData();
             }
         } catch (IOException | ClassNotFoundException e) {
-            System.err.println("✗ 获取集群状态失败: " + e.getMessage());
+            System.err.println("[x] 获取集群状态失败: " + e.getMessage());
         }
         return null;
     }

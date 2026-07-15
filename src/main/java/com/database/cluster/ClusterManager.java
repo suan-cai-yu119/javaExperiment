@@ -76,7 +76,7 @@ public class ClusterManager {
                 s.connect(new InetSocketAddress(peerHost, peerClusterPort), Protocol.CLUSTER_TIMEOUT);
                 s.setSoTimeout(Protocol.CLUSTER_TIMEOUT);
                 ClusterReplicator.exchangeNodes(s, this, currentNodeId, currentHost, clientPort);
-                System.out.println("✓ 发现对等节点: " + addr);
+                System.out.println("[OK] 发现对等节点: " + addr);
             } catch (Exception e) {
                 LOGGER.fine("对等节点 " + addr + " 暂不可达: " + e.getMessage());
             }
@@ -115,7 +115,7 @@ public class ClusterManager {
 
     public synchronized boolean joinCluster(String coordinatorHost, int coordinatorPort) {
         startSyncThread();
-        System.out.println("✓ 节点 " + currentNodeId + " 已加入集群");
+        System.out.println("[OK] 节点 " + currentNodeId + " 已加入集群");
         return true;
     }
 
@@ -123,7 +123,7 @@ public class ClusterManager {
         running = false;
         if (syncExecutor != null) syncExecutor.shutdown();
         nodes.clear();
-        System.out.println("✓ 已离开集群");
+        System.out.println("[OK] 已离开集群");
     }
 
     private void startSyncThread() {
@@ -262,6 +262,6 @@ public class ClusterManager {
         if (syncExecutor != null) syncExecutor.shutdown();
         if (replicator != null) replicator.stop();
         nodes.clear();
-        System.out.println("✓ 集群已关闭");
+        System.out.println("[OK] 集群已关闭");
     }
 }

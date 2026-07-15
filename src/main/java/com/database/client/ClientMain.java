@@ -60,13 +60,13 @@ public class ClientMain {
 
         Map<String, Object> clusterStatus = Client.fetchClusterStatus(host, port);
         if (clusterStatus == null) {
-            System.err.println("✗ 无法获取集群状态，请确保集群已启动");
+            System.err.println("[x] 无法获取集群状态，请确保集群已启动");
             System.exit(1);
         }
 
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) clusterStatus.get("nodes");
         if (nodes == null || nodes.isEmpty()) {
-            System.err.println("✗ 集群中没有可用节点");
+            System.err.println("[x] 集群中没有可用节点");
             System.exit(1);
         }
 
@@ -108,7 +108,7 @@ public class ClientMain {
         System.out.println("  └──────┴──────────────┴──────────┴──────────┴────────────┘");
 
         if (nodeInfos.isEmpty()) {
-            System.err.println("✗ 没有在线的节点可供选择");
+            System.err.println("[x] 没有在线的节点可供选择");
             System.exit(1);
         }
 
@@ -123,7 +123,7 @@ public class ClientMain {
                 }
             }
             if (selected == null) {
-                System.err.println("✗ 无效的选择");
+                System.err.println("[x] 无效的选择");
                 System.exit(1);
             }
 
@@ -137,7 +137,7 @@ public class ClientMain {
             System.out.println("  节点角色: " + roleInfo);
             startInteractive(selected.host, selected.port);
         } catch (NumberFormatException e) {
-            System.err.println("✗ 请输入有效的序号");
+            System.err.println("[x] 请输入有效的序号");
             System.exit(1);
         }
     }
@@ -161,13 +161,13 @@ public class ClientMain {
     private static void runBatch(String scriptPath, String host, int port) {
         Path path = Paths.get(scriptPath);
         if (!Files.exists(path)) {
-            System.err.println("✗ 脚本文件不存在: " + scriptPath);
+            System.err.println("[x] 脚本文件不存在: " + scriptPath);
             System.exit(1);
             return;
         }
         Client client = new Client(host, port);
         if (!client.connect()) {
-            System.err.println("✗ 无法连接到服务器 " + host + ":" + port);
+            System.err.println("[x] 无法连接到服务器 " + host + ":" + port);
             System.exit(1);
             return;
         }
@@ -184,13 +184,13 @@ public class ClientMain {
                     ui.processInput(line);
                     success++;
                 } catch (Exception e) {
-                    System.out.println("  ✗ 错误: " + e.getMessage());
+                    System.out.println("  [x] 错误: " + e.getMessage());
                     fail++;
                 }
             }
             System.out.println("→ 批处理完成: 成功 " + success + " 条, 失败 " + fail + " 条");
         } catch (IOException e) {
-            System.err.println("✗ 读取脚本文件失败: " + e.getMessage());
+            System.err.println("[x] 读取脚本文件失败: " + e.getMessage());
         } finally {
             client.disconnect();
         }

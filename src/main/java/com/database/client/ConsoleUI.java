@@ -42,10 +42,10 @@ public class ConsoleUI {
                 try {
                     processInput(input);
                 } catch (Exception e) {
-                    System.err.println("✗ 命令执行错误: " + e.getMessage());
+                    System.err.println("[x] 命令执行错误: " + e.getMessage());
                 }
             } catch (IOException e) {
-                System.err.println("✗ 读取输入失败: " + e.getMessage());
+                System.err.println("[x] 读取输入失败: " + e.getMessage());
                 break;
             }
         }
@@ -106,13 +106,13 @@ public class ConsoleUI {
                case "QUIT", "Q", "EXIT" -> handleQuit();
                case "CLEAR" -> clearScreen();
               
-              default -> System.out.println("✗ 未知命令，输入 HELP 查看帮助");
+              default -> System.out.println("[x] 未知命令，输入 HELP 查看帮助");
           }
      }
      
        private void handleCreate(String[] args) {
            if (args.length < 2) {
-               System.out.println("✗ 用法: CREATE DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
+               System.out.println("[x] 用法: CREATE DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
                return;
            }
            String type = args[0].toUpperCase();
@@ -124,7 +124,7 @@ public class ConsoleUI {
                resp = client.sendCommand(CommandType.CREATE_COLLECTION, name);
            } else if ("INDEX".equals(type) || "IDX".equals(type)) {
                if (args.length < 3) {
-                   System.out.println("✗ 用法: CREATE INDEX <collection> <field>");
+                   System.out.println("[x] 用法: CREATE INDEX <collection> <field>");
                    return;
                }
                Request req = new Request(CommandType.CREATE_INDEX);
@@ -132,7 +132,7 @@ public class ConsoleUI {
                req.setKey(args[2]);
                resp = client.sendRequest(req);
            } else {
-               System.out.println("✗ 类型错误: " + type);
+               System.out.println("[x] 类型错误: " + type);
                return;
            }
            printResponse(resp);
@@ -140,7 +140,7 @@ public class ConsoleUI {
      
        private void handleDrop(String[] args) {
            if (args.length < 2) {
-               System.out.println("✗ 用法: DROP DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
+               System.out.println("[x] 用法: DROP DATABASE|COLLECTION|TABLE|INDEX <name> [<field>]");
                return;
            }
            String type = args[0].toUpperCase();
@@ -152,7 +152,7 @@ public class ConsoleUI {
                resp = client.sendCommand(CommandType.DROP_COLLECTION, name);
            } else if ("INDEX".equals(type) || "IDX".equals(type)) {
                if (args.length < 3) {
-                   System.out.println("✗ 用法: DROP INDEX <collection> <field>");
+                   System.out.println("[x] 用法: DROP INDEX <collection> <field>");
                    return;
                }
                Request req = new Request(CommandType.DROP_INDEX);
@@ -160,7 +160,7 @@ public class ConsoleUI {
                req.setKey(args[2]);
                resp = client.sendRequest(req);
            } else {
-               System.out.println("✗ 类型错误: " + type);
+               System.out.println("[x] 类型错误: " + type);
                return;
            }
            printResponse(resp);
@@ -168,7 +168,7 @@ public class ConsoleUI {
 
       private void handleList(String[] args) {
           if (args.length == 0) {
-              System.out.println("✗ 用法: LIST DATABASES|COLLECTIONS|TABLES");
+              System.out.println("[x] 用法: LIST DATABASES|COLLECTIONS|TABLES");
               return;
           }
           String type = args[0].toUpperCase();
@@ -201,7 +201,7 @@ public class ConsoleUI {
                }
            } else if ("INDEXES".equals(type) || "IDX".equals(type)) {
                if (args.length < 2) {
-                   System.out.println("✗ 用法: LIST INDEXES <collection>");
+                   System.out.println("[x] 用法: LIST INDEXES <collection>");
                    return;
                }
                String colName = args[1];
@@ -220,13 +220,13 @@ public class ConsoleUI {
                    }
                }
            } else {
-               System.out.println("✗ 类型错误: " + type);
+               System.out.println("[x] 类型错误: " + type);
            }
       }
 
      private void handleUse(String[] args) {
          if (args.length == 0) {
-             System.out.println("✗ 用法: USE DATABASE <name>");
+             System.out.println("[x] 用法: USE DATABASE <name>");
              return;
          }
 
@@ -237,7 +237,7 @@ public class ConsoleUI {
          if ("DATABASE".equals(firstArg) || "DB".equals(firstArg)) {
              // 格式1: USE DATABASE <name> 或 USE DB <name>
              if (args.length < 2) {
-                 System.out.println("✗ 用法: USE DATABASE <name>");
+                 System.out.println("[x] 用法: USE DATABASE <name>");
                  return;
              }
              dbName = args[1];
@@ -255,7 +255,7 @@ public class ConsoleUI {
      
       private void handlePut(String[] args) {
           if (args.length < 3) {
-              System.out.println("✗ 用法: PUT <collection> <key> <field:value> ...");
+              System.out.println("[x] 用法: PUT <collection> <key> <field:value> ...");
               return;
           }
           Request req = new Request(CommandType.PUT);
@@ -282,7 +282,7 @@ public class ConsoleUI {
      
       private void handleGet(String[] args) {
           if (args.length < 2) {
-              System.out.println("✗ 用法: GET <collection> <key>");
+              System.out.println("[x] 用法: GET <collection> <key>");
               return;
           }
           Request req = new Request(CommandType.GET);
@@ -305,7 +305,7 @@ public class ConsoleUI {
      
       private void handleDelete(String[] args) {
           if (args.length < 2) {
-              System.out.println("✗ 用法: DELETE <collection> [<key>] 或 DELETE <collection> WHERE <field> = <value>");
+              System.out.println("[x] 用法: DELETE <collection> [<key>] 或 DELETE <collection> WHERE <field> = <value>");
               return;
           }
           Request req = new Request(CommandType.DELETE);
@@ -324,7 +324,7 @@ public class ConsoleUI {
                   req.setFilterField(args[2].substring(0, eq));
                   req.setFilterValue(parseValue(args[2].substring(eq + 1)));
               } else {
-                  System.out.println("✗ 用法: DELETE <collection> WHERE <field> = <value>");
+                  System.out.println("[x] 用法: DELETE <collection> WHERE <field> = <value>");
                   return;
               }
               printResponse(client.sendRequest(req));
@@ -337,7 +337,7 @@ public class ConsoleUI {
      
       private void handleUpdate(String[] args) {
           if (args.length < 3) {
-              System.out.println("✗ 用法: UPDATE <collection> <key> <f:v> ... 或 UPDATE <collection> WHERE <f>=<v> <sf:sv> ...");
+              System.out.println("[x] 用法: UPDATE <collection> <key> <f:v> ... 或 UPDATE <collection> WHERE <f>=<v> <sf:sv> ...");
               return;
           }
           Request req = new Request(CommandType.UPDATE);
@@ -361,7 +361,7 @@ public class ConsoleUI {
                   req.setFilterValue(parseValue(args[2].substring(eq + 1)));
                   setStart = 3;
               } else {
-                  System.out.println("✗ 用法: UPDATE <collection> WHERE <field> = <value> <field:value> ...");
+                  System.out.println("[x] 用法: UPDATE <collection> WHERE <field> = <value> <field:value> ...");
                   return;
               }
               Map<String, Object> setData = new LinkedHashMap<>();
@@ -376,7 +376,7 @@ public class ConsoleUI {
                   }
               }
               if (setData.isEmpty()) {
-                  System.out.println("✗ 请指定要更新的字段");
+                  System.out.println("[x] 请指定要更新的字段");
                   return;
               }
               req.setValue(setData);
@@ -407,7 +407,7 @@ public class ConsoleUI {
 
       private void handleBatch(String[] args) {
           if (args.length < 2) {
-              System.out.println("✗ 用法: BATCH PUT|UPDATE <collection> <k1> <f:v> ... || <k2> <f:v> ...");
+              System.out.println("[x] 用法: BATCH PUT|UPDATE <collection> <k1> <f:v> ... || <k2> <f:v> ...");
               return;
           }
           String subCmd = args[0].toUpperCase();
@@ -415,13 +415,13 @@ public class ConsoleUI {
           switch (subCmd) {
               case "PUT", "P" -> handleBatchPut(batchArgs);
               case "UPDATE", "UPD" -> handleBatchUpdate(batchArgs);
-              default -> System.out.println("✗ 未知子命令: " + subCmd + "，可用: PUT, UPDATE");
+              default -> System.out.println("[x] 未知子命令: " + subCmd + "，可用: PUT, UPDATE");
           }
       }
 
       private void handleBatchPut(String[] batchArgs) {
           if (batchArgs.length < 2) {
-              System.out.println("✗ 用法: BATCH PUT <collection> <k1> <f:v> ... || <k2> <f:v> ...");
+              System.out.println("[x] 用法: BATCH PUT <collection> <k1> <f:v> ... || <k2> <f:v> ...");
               return;
           }
           Request req = new Request(CommandType.BATCH_PUT);
@@ -429,7 +429,7 @@ public class ConsoleUI {
           Map<String, Object> entries = parseBatchEntries(
                   Arrays.copyOfRange(batchArgs, 1, batchArgs.length));
           if (entries.isEmpty()) {
-              System.out.println("✗ 没有有效的条目");
+              System.out.println("[x] 没有有效的条目");
               return;
           }
           req.setBatchData(entries);
@@ -438,7 +438,7 @@ public class ConsoleUI {
 
       private void handleBatchUpdate(String[] batchArgs) {
           if (batchArgs.length < 2) {
-              System.out.println("✗ 用法: BATCH UPDATE <collection> <k1> <f:v> ... || <k2> <f:v> ...");
+              System.out.println("[x] 用法: BATCH UPDATE <collection> <k1> <f:v> ... || <k2> <f:v> ...");
               return;
           }
           Request req = new Request(CommandType.BATCH_UPDATE);
@@ -446,7 +446,7 @@ public class ConsoleUI {
           Map<String, Object> entries = parseBatchEntries(
                   Arrays.copyOfRange(batchArgs, 1, batchArgs.length));
           if (entries.isEmpty()) {
-              System.out.println("✗ 没有有效的条目");
+              System.out.println("[x] 没有有效的条目");
               return;
           }
           req.setBatchData(entries);
@@ -488,7 +488,7 @@ public class ConsoleUI {
      
        private void handleScan(String[] args) {
            if (args.length == 0) {
-               System.out.println("✗ 用法: SCAN <collection>");
+               System.out.println("[x] 用法: SCAN <collection>");
                return;
            }
            Response resp = client.sendCommand(CommandType.SCAN, args[0]);
@@ -597,7 +597,7 @@ public class ConsoleUI {
 
      private void handleCluster(String[] args) {
          if (args.length == 0) {
-             System.out.println("✗ 用法: CLUSTER STATUS|JOIN <host> [port]|LEAVE");
+             System.out.println("[x] 用法: CLUSTER STATUS|JOIN <host> [port]|LEAVE");
              return;
          }
          String sub = args[0].toUpperCase();
@@ -662,7 +662,7 @@ public class ConsoleUI {
           Response resp = client.sendCommand(CommandType.PING);
           long time = (System.nanoTime() - start) / 1_000_000;
           if (resp.isSuccess()) {
-              System.out.println("✓ " + resp.getMessage() + " (延迟: " + time + "ms)");
+              System.out.println("[OK] " + resp.getMessage() + " (延迟: " + time + "ms)");
           }
       }
 
@@ -684,10 +684,10 @@ public class ConsoleUI {
                   System.out.println("  " + prevCmd);
                   processInput(prevCmd);
               } else {
-                  System.out.println("✗ 历史索引超出范围，共 " + history.size() + " 条");
+                  System.out.println("[x] 历史索引超出范围，共 " + history.size() + " 条");
               }
           } catch (NumberFormatException e) {
-              System.out.println("✗ 用法: !<序号>  例: !3 执行第 3 条历史命令");
+              System.out.println("[x] 用法: !<序号>  例: !3 执行第 3 条历史命令");
           }
       }
 
@@ -767,9 +767,9 @@ public class ConsoleUI {
      private void printResponse(Response resp) {
          if (resp == null) return;
          if (resp.isSuccess()) {
-             System.out.println("✓ " + resp.getMessage());
+             System.out.println("[OK] " + resp.getMessage());
          } else {
-             System.out.println("✗ " + resp.getMessage());
+             System.out.println("[x] " + resp.getMessage());
          }
      }
      
