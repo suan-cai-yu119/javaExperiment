@@ -1,7 +1,9 @@
  package com.database.server;
  
 import com.database.cluster.ClusterManager;
-import com.database.common.*;
+import com.database.common.Protocol;
+import com.database.common.Request;
+import com.database.common.Response;
 import com.database.core.Database;
 
 import java.io.*;
@@ -77,16 +79,6 @@ public class Server {
                 Response recoveryResp = database.autoLoadDatabases();
                 System.out.println("  " + recoveryResp.getMessage());
                 
-               // 启动 HTTP RESTful API 服务器
-                try {
-                    int httpPort = port + Protocol.HTTP_PORT_OFFSET;
-                    HttpApiServer httpApi = new HttpApiServer(database, clusterManager, httpPort);
-                    httpApi.start();
-                } catch (IOException e) {
-                    System.err.println("⚠ HTTP API 服务器启动失败: " + e.getMessage());
-                    System.err.println("  提示：端口 " + (port + Protocol.HTTP_PORT_OFFSET) + " 可能被占用");
-                }
-
                 // 启动探针服务器（匿名查询，不打印日志、不分配编号）
                 int probePort = port + Protocol.PROBE_PORT_OFFSET;
                 new Thread(() -> {
