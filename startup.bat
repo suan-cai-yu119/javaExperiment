@@ -22,6 +22,8 @@ if "%PORT%"=="" set PORT=9527
 set "DEFAULT_PEERS=127.0.0.1:%PORT%"
 set /p PEERS="Enter peers (comma-separated host:port) [%DEFAULT_PEERS%]: "
 if "%PEERS%"=="" set PEERS=%DEFAULT_PEERS%
+echo.%PEERS% | findstr /C:"%DEFAULT_PEERS%" >nul 2>&1
+if errorlevel 1 set "PEERS=%DEFAULT_PEERS%,%PEERS%"
 
 set "TMPFILE=%TEMP%\node_%PORT%.bat"
 if exist "%TMPFILE%" del "%TMPFILE%"
