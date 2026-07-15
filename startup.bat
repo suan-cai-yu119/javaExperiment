@@ -23,7 +23,13 @@ set "DEFAULT_PEERS=127.0.0.1:%PORT%"
 set /p PEERS="Enter peers (comma-separated host:port) [%DEFAULT_PEERS%]: "
 if "%PEERS%"=="" set PEERS=%DEFAULT_PEERS%
 
-start "Node-%PORT%" cmd /c "java -jar ""%JAR_PATH%"" %PORT% --cluster --peers %PEERS% ^& pause"
+set "TMPFILE=%TEMP%\node_%PORT%.bat"
+if exist "%TMPFILE%" del "%TMPFILE%"
+echo @echo off > "%TMPFILE%"
+echo chcp 65001 ^>nul >> "%TMPFILE%"
+echo java -jar "%JAR_PATH%" %PORT% --cluster --peers %PEERS% >> "%TMPFILE%"
+echo pause >> "%TMPFILE%"
+start "Node-%PORT%" cmd /c "%TMPFILE%"
 
 echo.
 echo [OK] Node %PORT% started. Peers: %PEERS%

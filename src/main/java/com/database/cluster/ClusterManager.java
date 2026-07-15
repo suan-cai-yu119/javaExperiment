@@ -44,8 +44,9 @@ public class ClusterManager {
         this.replicator = new ClusterReplicator(database, this, clusterPortVal);
 
         String peersStr = getArg(args, "--peers", "");
+        this.peerAddresses = new java.util.ArrayList<>();
         if (!peersStr.isEmpty()) {
-            this.peerAddresses = Arrays.asList(peersStr.split(","));
+            this.peerAddresses.addAll(java.util.Arrays.asList(peersStr.split(",")));
         }
         String selfAddr = currentHost + ":" + clientPort;
         if (!this.peerAddresses.contains(selfAddr)) {
