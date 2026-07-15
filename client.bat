@@ -1,18 +1,18 @@
 @echo off
-chcp 65001 >nul
-title 迷你数据库客户端
+chcp 65001 >nul 2>&1
+title MiniDB Client
 
 :menu
 cls
-echo === 迷你数据库客户端 ===
+echo ================= MiniDB Client =================
 echo.
-echo   1. 集群选择模式（连接到 9527，展示所有节点）
-echo   2. 直连节点 127.0.0.1:9527
-echo   3. 直连节点 127.0.0.1:9528
-echo   4. 直连节点 127.0.0.1:9529
-echo   5. 退出
+echo   1. Cluster mode (connect to 9527, show all nodes)
+echo   2. Direct connect to 127.0.0.1:9527
+echo   3. Direct connect to 127.0.0.1:9528
+echo   4. Direct connect to 127.0.0.1:9529
+echo   5. Exit
 echo.
-set /p choice="请输入选项 (1/2/3/4/5): "
+set /p choice="Enter 1/2/3/4/5: "
 
 if "%choice%"=="1" (
     java -cp "target\mini-database-1.0.0.jar" com.database.client.ClientMain 127.0.0.1 9527 --cluster
@@ -36,6 +36,6 @@ if "%choice%"=="4" (
 )
 if "%choice%"=="5" exit /b
 
-echo 无效选项
+echo Invalid option
 pause
 goto menu
