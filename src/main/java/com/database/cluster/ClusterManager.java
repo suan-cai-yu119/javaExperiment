@@ -74,6 +74,7 @@ public class ClusterManager {
             String peerHost = parts[0];
             int peerPort = Integer.parseInt(parts[1]);
             if (peerHost.equals(currentHost) && peerPort == clientPort) continue;
+            if (findNodeByAddress(peerHost, peerPort) != null) continue;
 
             int peerClusterPort = peerPort + Protocol.CLUSTER_PORT_OFFSET;
             try (Socket s = new Socket()) {
@@ -96,12 +97,15 @@ public class ClusterManager {
             if (self != null) self.setRole(ClusterRole.MASTER);
             System.out.println("★ 本节点为主节点，集群端口: " + (clientPort + Protocol.CLUSTER_PORT_OFFSET));
         } else if (currentRole == ClusterRole.SLAVE) {
-            if (replicator.isRunning()) {
-                replicator.stop();
-            }
             ClusterNode master = findMaster();
             if (master != null) {
                 int masterClusterPort = master.getPort() + Protocol.CLUSTER_PORT_OFFSET;
+                if (replicator.matchesMaster(master.getHost(), masterClusterPort)) {
+                    return;
+                }
+                if (replicator.isRunning()) {
+                    replicator.stop();
+                }
                 replicator.startSlave(master.getHost(), masterClusterPort);
                 System.out.println("○ 本节点为从节点，主节点: " + master.toAddress());
             }
@@ -258,6 +262,7 @@ public class ClusterManager {
         }
         ClusterRole oldRole = currentRole;
         String oldMasterId = masterNodeId;
+        node.updateHeartbeat();
         nodes.put(node.getNodeId(), node);
         electMaster();
         ClusterNode master = findMaster();

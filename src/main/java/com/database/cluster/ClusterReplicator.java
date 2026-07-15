@@ -36,6 +36,8 @@ public class ClusterReplicator {
     private final int clusterPort;
     private final List<SlaveConnection> slaves = new CopyOnWriteArrayList<>();
     private volatile boolean running;
+    private volatile String slaveTargetHost;
+    private volatile int slaveTargetPort;
 
     public ClusterReplicator(Database database, ClusterManager clusterManager, int clusterPort) {
         this.database = database;
@@ -64,8 +66,14 @@ public class ClusterReplicator {
         }, "cluster-server").start();
     }
 
+    public boolean matchesMaster(String host, int port) {
+        return running && host.equals(slaveTargetHost) && port == slaveTargetPort;
+    }
+
     public void startSlave(String masterHost, int masterPort) {
         running = true;
+        slaveTargetHost = masterHost;
+        slaveTargetPort = masterPort;
         new Thread(() -> {
             LOG.info("从节点线程已启动，正在连接主节点 " + masterHost + ":" + masterPort);
             ScheduledExecutorService heartbeater = null;
@@ -173,7 +181,8 @@ public class ClusterReplicator {
                 replay(entry);
             }
             case HEARTBEAT -> {
-                clusterManager.getSelf().updateHeartbeat();
+                ClusterNode sender = clusterManager.getNode(msg.getSenderId());
+                if (sender != null) sender.updateHeartbeat();
             }
             case NODE_LIST -> {
                 Object rawData = msg.getData();
