@@ -2,8 +2,9 @@
 chcp 65001 >nul 2>&1
 title MiniDB Node Launcher
 
+set "BASE=%~dp0"
 set "CLUSTER_PEERS=127.0.0.1:9527,127.0.0.1:9528,127.0.0.1:9529"
-set "JAR_PATH=target\mini-database-1.0.0.jar"
+set "JAR_PATH=%BASE%target\mini-database-1.0.0.jar"
 
 if not exist "%JAR_PATH%" (
     echo [ERROR] %JAR_PATH% not found. Run: mvn clean package
