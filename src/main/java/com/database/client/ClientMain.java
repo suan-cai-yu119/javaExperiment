@@ -72,7 +72,7 @@ public class ClientMain {
 
         System.out.println("\n  当前集群节点列表:");
         System.out.println("  ┌──────┬──────────────┬──────────┬──────────┬────────────┐");
-        System.out.println("  │ 序号 │ 节点地址      │ 角色     │ 状态     │ 延迟(ms)   │");
+        System.out.println("  │ 序号  │ 节点地址       │ 角色     │ 状态      │ 延迟(ms)    │");
         System.out.println("  ├──────┼──────────────┼──────────┼──────────┼────────────┤");
 
         List<NodeInfo> nodeInfos = new ArrayList<>();

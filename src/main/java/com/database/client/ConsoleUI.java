@@ -711,54 +711,54 @@ public class ConsoleUI {
      
      private void printHelp() {
          System.out.println("""
-                 ╔══════════════════════════════════════════════════════╗
-                 ║              迷你数据库系统 - 命令帮助              ║
-                 ╠══════════════════════════════════════════════════════╣
-                 ║  数据库操作:                                        ║
+                 ╔════════════════════════════════════════════════════╗
+                 ║              迷你数据库系统 - 命令帮助                  ║
+                 ╠════════════════════════════════════════════════════╣
+                 ║  数据库操作:                                         ║
                  ║    CREATE DATABASE <name>    创建数据库              ║
                  ║    DROP DATABASE <name>      删除数据库              ║
-                 ║    LIST DATABASES            列出所有数据库          ║
+                 ║    LIST DATABASES            列出所有数据库           ║
                  ║    USE DATABASE <name>       切换数据库              ║
                  ║                                                    ║
-                  ║  集合/表操作:                                        ║
-                  ║    CREATE COLLECTION|TABLE <n>  创建集合            ║
-                  ║    DROP COLLECTION|TABLE <n>    删除集合            ║
-                  ║    LIST COLLECTIONS|TABLES      列出所有集合        ║
-                  ║                                                    ║
-                  ║  键值操作（NoSQL 文档模式）:                          ║
-                  ║    PUT <col> <key> <f:v> ...  替换整个文档           ║
-                  ║    GET <col> <key>             获取文档              ║
-                  ║    UPDATE <col> <key> <f:v>... 更新指定字段（$set）  ║
-                  ║    DELETE <col> <key>          删除文档              ║
-                  ║    DELETE <col> WHERE f=v     按条件删除             ║
-                  ║  SCAN <col>                 扫描所有文档           ║
-                  ║                                                    ║
-                  ║  批量操作:                                          ║
-                  ║    BATCH PUT <c> <k1> f:v...       <k2>...  批量插入 ║
-                  ║    BATCH UPDATE <c> <k1> f:v...      <k2>... 批量更新║
-                  ║    UPDATE <c> WHERE f=v sf:sv...   条件批量更新    ║
-                  ║                                                    ║
-                   ║  索引:                                              ║
-                   ║    CREATE INDEX <col> <f>    创建索引（加速WHERE）    ║
-                   ║    DROP INDEX <col> <f>      删除索引                ║
-                   ║    LIST INDEXES <col>        查看索引列表            ║
-                   ║                                                    ║
-                   ║  持久化:                                            ║
-                   ║    SAVE                      保存数据               ║
-                   ║    LOAD [dbname]             加载数据               ║
-                   ║                                                    ║
-                   ║  集群:                                              ║
-                   ║    CLUSTER STATUS             集群状态               ║
-                   ║    CLUSTER JOIN <h> [p]       加入集群               ║
-                   ║    CLUSTER LEAVE              离开集群               ║
-                   ║                                                    ║
-                   ║  系统:                                              ║
-                 ║    HELP                      显示帮助               ║
-                 ║    PING                      心跳检测               ║
-                  ║    QUIT                      退出                   ║
-                  ║    HISTORY                   显示历史命令            ║
-                  ║    !<n>                      执行第 n 条历史命令     ║
-                  ╚══════════════════════════════════════════════════════╝
+                 ║  集合/表操作:                                        ║
+                 ║    CREATE COLLECTION|TABLE <n>  创建集合            ║
+                 ║    DROP COLLECTION|TABLE <n>    删除集合            ║
+                 ║    LIST COLLECTIONS|TABLES      列出所有集合         ║
+                 ║                                                    ║
+                 ║  键值操作（NoSQL 文档模式）:                           ║
+                 ║    PUT <col> <key> <f:v> ...  替换整个文档            ║
+                 ║    GET <col> <key>             获取文档              ║
+                 ║    UPDATE <col> <key> <f:v>... 更新指定字段（$set）    ║
+                 ║    DELETE <col> <key>          删除文档              ║
+                 ║    DELETE <col> WHERE f=v     按条件删除             ║
+                 ║  SCAN <col>                 扫描所有文档              ║
+                 ║                                                    ║
+                 ║  批量操作:                                           ║
+                 ║    BATCH PUT <c> <k1> f:v... ||    <k2>...  批量插入 ║
+                 ║    BATCH UPDATE <c> <k1> f:v... ||   <k2>... 批量更新║
+                 ║    UPDATE <c> WHERE f=v sf:sv...   条件批量更新       ║
+                 ║                                                     ║
+                 ║  索引:                                               ║
+                 ║    CREATE INDEX <col> <f>    创建索引（加速WHERE）     ║ 
+                 ║    DROP INDEX <col> <f>      删除索引                ║
+                 ║    LIST INDEXES <col>        查看索引列表             ║
+                 ║                                                     ║
+                 ║  持久化:                                             ║
+                 ║    SAVE                      保存数据                 ║
+                 ║    LOAD [dbname]             加载数据                 ║
+                 ║                                                     ║
+                 ║  集群:                                               ║
+                 ║    CLUSTER STATUS             集群状态                ║
+                 ║    CLUSTER JOIN <h> [p]       加入集群                ║
+                 ║    CLUSTER LEAVE              离开集群                ║
+                 ║                                                     ║
+                 ║  系统:                                               ║
+                 ║    HELP                      显示帮助                 ║
+                 ║    PING                      心跳检测                 ║
+                 ║    QUIT                      退出                    ║
+                 ║    HISTORY                   显示历史命令              ║                  
+                 ║    !<n>                      执行第 n 条历史命令        ║
+                 ╚══════════════════════════════════════════════════════╝
                  """);
      }
      
