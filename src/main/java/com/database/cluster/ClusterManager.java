@@ -158,8 +158,7 @@ public class ClusterManager {
                 int peerPort = Integer.parseInt(parts[1]);
                 if (peerHost.equals(currentHost) && peerPort == clientPort) continue;
 
-                String peerId = "node-" + peerHost.replace(".", "-") + "-" + peerPort;
-                ClusterNode existing = nodes.get(peerId);
+                ClusterNode existing = findNodeByAddress(peerHost, peerPort);
 
                 if (existing == null || !existing.isAlive()) {
                     int peerClusterPort = peerPort + Protocol.CLUSTER_PORT_OFFSET;
@@ -245,6 +244,18 @@ public class ClusterManager {
     }
 
     public void addNode(ClusterNode node) {
+        String existingId = null;
+        for (ClusterNode n : nodes.values()) {
+            if (!n.getNodeId().equals(node.getNodeId())
+                    && n.getHost().equals(node.getHost())
+                    && n.getPort() == node.getPort()) {
+                existingId = n.getNodeId();
+                break;
+            }
+        }
+        if (existingId != null) {
+            nodes.remove(existingId);
+        }
         ClusterRole oldRole = currentRole;
         String oldMasterId = masterNodeId;
         nodes.put(node.getNodeId(), node);
@@ -258,6 +269,15 @@ public class ClusterManager {
 
     public ClusterNode getSelf() {
         return nodes.get(currentNodeId);
+    }
+
+    public ClusterNode findNodeByAddress(String host, int port) {
+        for (ClusterNode node : nodes.values()) {
+            if (node.getHost().equals(host) && node.getPort() == port) {
+                return node;
+            }
+        }
+        return null;
     }
 
     public ClusterNode getNode(String nodeId) {
