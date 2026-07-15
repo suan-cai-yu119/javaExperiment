@@ -41,4 +41,7 @@
 
       /** 集群通信超时（毫秒） */
       public static final int CLUSTER_TIMEOUT = 3000;
+
+      /** 探针端口偏移量（clientPort + OFFSET），用于无需登录的匿名查询 */
+      public static final int PROBE_PORT_OFFSET = 5000;
  }

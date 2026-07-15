@@ -1,11 +1,10 @@
  package com.database.server;
  
 import com.database.cluster.ClusterManager;
-import com.database.common.Protocol;
-import com.database.common.Response;
+import com.database.common.*;
 import com.database.core.Database;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.*;
@@ -78,15 +77,29 @@ public class Server {
                 Response recoveryResp = database.autoLoadDatabases();
                 System.out.println("  " + recoveryResp.getMessage());
                 
-                // 启动 HTTP RESTful API 服务器
-               try {
-                   int httpPort = port + Protocol.HTTP_PORT_OFFSET;
-                   HttpApiServer httpApi = new HttpApiServer(database, clusterManager, httpPort);
-                   httpApi.start();
-               } catch (IOException e) {
-                   System.err.println("⚠ HTTP API 服务器启动失败: " + e.getMessage());
-                   System.err.println("  提示：端口 " + (port + Protocol.HTTP_PORT_OFFSET) + " 可能被占用");
-               }
+               // 启动 HTTP RESTful API 服务器
+                try {
+                    int httpPort = port + Protocol.HTTP_PORT_OFFSET;
+                    HttpApiServer httpApi = new HttpApiServer(database, clusterManager, httpPort);
+                    httpApi.start();
+                } catch (IOException e) {
+                    System.err.println("⚠ HTTP API 服务器启动失败: " + e.getMessage());
+                    System.err.println("  提示：端口 " + (port + Protocol.HTTP_PORT_OFFSET) + " 可能被占用");
+                }
+
+                // 启动探针服务器（匿名查询，不打印日志、不分配编号）
+                int probePort = port + Protocol.PROBE_PORT_OFFSET;
+                new Thread(() -> {
+                    try (ServerSocket probeSocket = new ServerSocket(probePort)) {
+                        while (running) {
+                            try (Socket s = probeSocket.accept()) {
+                                handleProbe(s);
+                            } catch (IOException ignored) {}
+                        }
+                    } catch (IOException e) {
+                        System.err.println("⚠ 探针服务器启动失败（端口 " + probePort + "）: " + e.getMessage());
+                    }
+                }, "probe-server").start();
                 
                 System.out.println("[OK] 等待客户端连接...\n");
                
@@ -138,7 +151,26 @@ public class Server {
            System.out.println("\n[OK] 服务器已安全关闭");
        }
       
-      public static void main(String[] args) {
+       private void handleProbe(Socket s) {
+           try (ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
+                ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream())) {
+               Request req = (Request) ois.readObject();
+               switch (req.getCommand()) {
+                   case PING -> oos.writeObject(Response.ok("PONG", System.currentTimeMillis()));
+                   case CLUSTER_STATUS -> {
+                       if (clusterManager != null && clusterManager.isClusterEnabled()) {
+                           oos.writeObject(Response.ok("集群状态", clusterManager.getClusterStatus()));
+                       } else {
+                           oos.writeObject(Response.fail("集群模式未启用"));
+                       }
+                   }
+                   default -> oos.writeObject(Response.fail("探针端口仅支持 PING 和 CLUSTER_STATUS"));
+               }
+               oos.flush();
+           } catch (Exception ignored) {}
+       }
+
+       public static void main(String[] args) {
           int port = Protocol.DEFAULT_PORT;
            if (args.length > 0 && !args[0].startsWith("--")) {
               try {

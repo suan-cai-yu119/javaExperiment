@@ -96,8 +96,9 @@ import java.util.logging.Logger;
     public boolean isConnected() { return connected; }
 
     public static long measureLatency(String host, int port) {
+        int probePort = port + Protocol.PROBE_PORT_OFFSET;
         long start = System.nanoTime();
-        try (Socket s = new Socket(host, port);
+        try (Socket s = new Socket(host, probePort);
              ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
              ObjectInputStream ois = new ObjectInputStream(s.getInputStream())) {
             s.setSoTimeout(Protocol.TIMEOUT);
@@ -112,11 +113,11 @@ import java.util.logging.Logger;
 
     @SuppressWarnings("unchecked")
     public static Map<String, Object> fetchClusterStatus(String host, int port) {
-        try (Socket s = new Socket(host, port);
+        int probePort = port + Protocol.PROBE_PORT_OFFSET;
+        try (Socket s = new Socket(host, probePort);
              ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream());
              ObjectInputStream ois = new ObjectInputStream(s.getInputStream())) {
             s.setSoTimeout(Protocol.TIMEOUT);
-            ois.readObject();
             oos.writeObject(new Request(CommandType.CLUSTER_STATUS));
             oos.flush();
             Response resp = (Response) ois.readObject();
