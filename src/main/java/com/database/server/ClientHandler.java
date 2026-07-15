@@ -83,12 +83,14 @@ import static com.database.cluster.ClusterReplicator.WalEntry;
          LOGGER.info("客户端 #" + clientId + " 已断开连接");
      }
      
-      private Response checkWriteAllowed() {
-          if (clusterManager != null && clusterManager.isClusterEnabled() && !clusterManager.isMaster()) {
-              return Response.fail("当前节点为 SLAVE（只读），无法执行写操作");
-          }
-          return null;
-      }
+       private Response checkWriteAllowed() {
+           if (clusterManager != null && clusterManager.isClusterEnabled()) {
+               if (!clusterManager.isMaster()) {
+                   return Response.fail("当前节点不是主节点（只读），无法执行写操作");
+               }
+           }
+           return null;
+       }
 
       private void broadcastWrite(String op, String collection, String key, Object value) {
           if (clusterManager != null && clusterManager.isClusterEnabled()) {
@@ -102,11 +104,16 @@ import static com.database.cluster.ClusterReplicator.WalEntry;
       private Response processRequest(Request request) {
           switch (request.getCommand()) {
               // 数据库操作
-              case CREATE_DATABASE:
-                  Response createResp = database.createDatabase(request.getArgs()[0]);
-                  return createResp;
-              case DROP_DATABASE:
-                  return database.dropDatabase(request.getArgs()[0]);
+               case CREATE_DATABASE: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   return database.createDatabase(request.getArgs()[0]);
+               }
+               case DROP_DATABASE: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   return database.dropDatabase(request.getArgs()[0]);
+               }
               case LIST_DATABASES:
                   Set<String> dbs = database.listDatabases();
                   return Response.ok("数据库列表", dbs);
@@ -114,10 +121,16 @@ import static com.database.cluster.ClusterReplicator.WalEntry;
                   return database.useDatabase(request.getArgs()[0]);
                   
               // 集合操作
-              case CREATE_COLLECTION:
-                  return database.createCollection(request.getArgs()[0]);
-              case DROP_COLLECTION:
-                  return database.dropCollection(request.getArgs()[0]);
+               case CREATE_COLLECTION: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   return database.createCollection(request.getArgs()[0]);
+               }
+               case DROP_COLLECTION: {
+                   Response deny = checkWriteAllowed();
+                   if (deny != null) return deny;
+                   return database.dropCollection(request.getArgs()[0]);
+               }
               case LIST_COLLECTIONS:
                   return Response.ok("集合列表", database.listCollections());
 
@@ -249,8 +262,11 @@ import static com.database.cluster.ClusterReplicator.WalEntry;
                }
 
                // 持久化
-               case SAVE:
-                   return database.save();
+                case SAVE: {
+                    Response deny = checkWriteAllowed();
+                    if (deny != null) return deny;
+                    return database.save();
+                }
                case LOAD:
                    return database.load(request.getArgs().length > 0 ? request.getArgs()[0] : null);
                   

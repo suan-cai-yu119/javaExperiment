@@ -22,9 +22,9 @@ public class ClusterManager {
     private ScheduledExecutorService syncExecutor;
     private ClusterReplicator replicator;
     private boolean clusterEnabled;
-    private String clusterPort;
     private int clientPort;
     private List<String> peerAddresses;
+    private volatile String masterNodeId;
 
     public ClusterManager(Database database) {
         this.database = database;
@@ -34,13 +34,13 @@ public class ClusterManager {
         this.currentRole = ClusterRole.CANDIDATE;
         this.clusterEnabled = false;
         this.peerAddresses = new ArrayList<>();
+        this.masterNodeId = null;
     }
 
     public void enableCluster(int clientPort, String[] args) {
         this.clusterEnabled = true;
         this.clientPort = clientPort;
         int clusterPortVal = clientPort + Protocol.CLUSTER_PORT_OFFSET;
-        this.clusterPort = String.valueOf(clusterPortVal);
         this.replicator = new ClusterReplicator(database, this, clusterPortVal);
 
         String peersStr = getArg(args, "--peers", "");
@@ -57,9 +57,13 @@ public class ClusterManager {
 
         System.out.println("→ 集群模式已启用，对等节点: " + String.join(", ", peerAddresses));
 
+        replicator.startMaster();
+        System.out.println("→ 集群服务器已启动，等待节点发现...");
+
         discoverPeers();
         electMaster();
-        startRole();
+        applyRole();
+
         startSyncThread();
     }
 
@@ -73,8 +77,8 @@ public class ClusterManager {
 
             int peerClusterPort = peerPort + Protocol.CLUSTER_PORT_OFFSET;
             try (Socket s = new Socket()) {
-                s.connect(new InetSocketAddress(peerHost, peerClusterPort), Protocol.CLUSTER_TIMEOUT);
-                s.setSoTimeout(Protocol.CLUSTER_TIMEOUT);
+                s.connect(new InetSocketAddress(peerHost, peerClusterPort), 2000);
+                s.setSoTimeout(3000);
                 ClusterReplicator.exchangeNodes(s, this, currentNodeId, currentHost, clientPort);
                 System.out.println("[OK] 发现对等节点: " + addr);
             } catch (Exception e) {
@@ -83,13 +87,18 @@ public class ClusterManager {
         }
     }
 
-    private void startRole() {
+    private void applyRole() {
         if (currentRole == ClusterRole.MASTER) {
-            replicator.startMaster();
-            System.out.println("★ 本节点被选举为主节点，集群端口: " + clusterPort);
+            if (!replicator.isRunning()) {
+                replicator.startMaster();
+            }
             ClusterNode self = nodes.get(currentNodeId);
             if (self != null) self.setRole(ClusterRole.MASTER);
-        } else {
+            System.out.println("★ 本节点为主节点，集群端口: " + (clientPort + Protocol.CLUSTER_PORT_OFFSET));
+        } else if (currentRole == ClusterRole.SLAVE) {
+            if (replicator.isRunning()) {
+                replicator.stop();
+            }
             ClusterNode master = findMaster();
             if (master != null) {
                 int masterClusterPort = master.getPort() + Protocol.CLUSTER_PORT_OFFSET;
@@ -136,26 +145,57 @@ public class ClusterManager {
 
         syncExecutor.scheduleAtFixedRate(() -> {
             if (!running) return;
+
             ClusterNode self = nodes.get(currentNodeId);
-            if (self != null) {
-                self.updateHeartbeat();
+            if (self != null) self.updateHeartbeat();
+
+            boolean topologyChanged = false;
+
+            for (String addr : peerAddresses) {
+                String[] parts = addr.split(":");
+                if (parts.length != 2) continue;
+                String peerHost = parts[0];
+                int peerPort = Integer.parseInt(parts[1]);
+                if (peerHost.equals(currentHost) && peerPort == clientPort) continue;
+
+                String peerId = "node-" + peerHost.replace(".", "-") + "-" + peerPort;
+                ClusterNode existing = nodes.get(peerId);
+
+                if (existing == null || !existing.isAlive()) {
+                    int peerClusterPort = peerPort + Protocol.CLUSTER_PORT_OFFSET;
+                    try (Socket s = new Socket()) {
+                        s.connect(new InetSocketAddress(peerHost, peerClusterPort), 2000);
+                        s.setSoTimeout(3000);
+                        ClusterReplicator.exchangeNodes(s, this, currentNodeId, currentHost, clientPort);
+                        topologyChanged = true;
+                        System.out.println("[OK] 同步中发现节点: " + addr);
+                    } catch (Exception e) {
+                        LOGGER.finest("节点 " + addr + " 仍不可达");
+                    }
+                }
             }
 
-            boolean changed = false;
             long now = System.currentTimeMillis();
             for (ClusterNode node : nodes.values()) {
                 if (!node.getNodeId().equals(currentNodeId) && node.isAlive()) {
                     if (now - node.getLastHeartbeat() > Protocol.NODE_TIMEOUT) {
                         node.setAlive(false);
-                        changed = true;
+                        topologyChanged = true;
                         System.out.println("⚠ 节点 " + node.getNodeId() + " (" + node.toAddress() + ") 已超时");
                     }
                 }
             }
-            if (changed) {
+
+            if (topologyChanged) {
+                ClusterRole oldRole = currentRole;
+                String oldMasterId = masterNodeId;
                 electMaster();
-                if (currentRole == ClusterRole.MASTER && !replicator.isRunning()) {
-                    replicator.startMaster();
+
+                ClusterNode master = findMaster();
+                masterNodeId = (master != null) ? master.getNodeId() : null;
+
+                if (currentRole != oldRole || !Objects.equals(masterNodeId, oldMasterId)) {
+                    applyRole();
                 }
             }
         }, Protocol.HEARTBEAT_INTERVAL, Protocol.HEARTBEAT_INTERVAL, TimeUnit.MILLISECONDS);
@@ -174,12 +214,11 @@ public class ClusterManager {
                     .filter(n -> !n.getNodeId().equals(master.getNodeId()) && n.isAlive())
                     .forEach(n -> n.setRole(ClusterRole.SLAVE));
 
-            boolean wasMaster = currentRole == ClusterRole.MASTER;
             if (master.getNodeId().equals(currentNodeId)) {
-                currentRole = ClusterRole.MASTER;
-                if (!wasMaster) {
+                if (currentRole != ClusterRole.MASTER) {
                     System.out.println("→ 本节点被选举为主节点");
                 }
+                currentRole = ClusterRole.MASTER;
             } else {
                 if (currentRole != ClusterRole.SLAVE) {
                     System.out.println("→ 本节点为从节点，主节点: " + master.getNodeId() + " (" + master.toAddress() + ")");
@@ -206,8 +245,15 @@ public class ClusterManager {
     }
 
     public void addNode(ClusterNode node) {
+        ClusterRole oldRole = currentRole;
+        String oldMasterId = masterNodeId;
         nodes.put(node.getNodeId(), node);
         electMaster();
+        ClusterNode master = findMaster();
+        masterNodeId = (master != null) ? master.getNodeId() : null;
+        if (currentRole != oldRole || !Objects.equals(masterNodeId, oldMasterId)) {
+            applyRole();
+        }
     }
 
     public ClusterNode getSelf() {
