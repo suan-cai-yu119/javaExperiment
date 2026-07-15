@@ -2,11 +2,13 @@
 chcp 65001 >nul 2>&1
 title MiniDB Client
 
+setlocal enabledelayedexpansion
+
 set "BASE=%~dp0"
 set "JAR_PATH=%BASE%target\mini-database-1.0.0.jar"
 
 if not exist "%JAR_PATH%" (
-    echo [ERROR] %JAR_PATH% not found. Run: mvn clean package
+    echo [ERROR] JAR not found. Run: mvn clean package
     pause
     exit /b 1
 )
@@ -15,35 +17,39 @@ if not exist "%JAR_PATH%" (
 cls
 echo ================= MiniDB Client =================
 echo.
-echo   1. Cluster mode (connect to 9527, show all nodes)
-echo   2. Direct connect to 127.0.0.1:9527
-echo   3. Direct connect to 127.0.0.1:9528
-echo   4. Direct connect to 127.0.0.1:9529
-echo   5. Exit
+echo   1. Cluster mode (connect to a node, show all nodes)
+echo   2. Direct connect (enter address manually)
+echo   3. Exit
 echo.
-set /p choice="Enter choice (1-5): "
+set /p choice="Enter choice (1-3): "
 
 if "%choice%"=="1" (
-    java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9527 --cluster
+    set "ADDR="
+    set /p ADDR="Enter node address [127.0.0.1:9527]: "
+    if not defined ADDR set ADDR=127.0.0.1:9527
+    for /f "tokens=1,2 delims=:" %%a in ("!ADDR!") do (
+        set "HOST=%%a"
+        set "PORT=%%b"
+    )
+    if not defined PORT set "PORT=!HOST!" & set "HOST=127.0.0.1"
+    java -cp "%JAR_PATH%" com.database.client.ClientMain !HOST! !PORT! --cluster
     pause
     goto menu
 )
 if "%choice%"=="2" (
-    java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9527
+    set "ADDR="
+    set /p ADDR="Enter node address [127.0.0.1:9527]: "
+    if not defined ADDR set ADDR=127.0.0.1:9527
+    for /f "tokens=1,2 delims=:" %%a in ("!ADDR!") do (
+        set "HOST=%%a"
+        set "PORT=%%b"
+    )
+    if not defined PORT set "PORT=!HOST!" & set "HOST=127.0.0.1"
+    java -cp "%JAR_PATH%" com.database.client.ClientMain !HOST! !PORT!
     pause
     goto menu
 )
-if "%choice%"=="3" (
-    java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9528
-    pause
-    goto menu
-)
-if "%choice%"=="4" (
-    java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9529
-    pause
-    goto menu
-)
-if "%choice%"=="5" exit /b
+if "%choice%"=="3" exit /b
 
 echo Invalid option
 pause

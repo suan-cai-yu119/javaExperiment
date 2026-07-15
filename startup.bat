@@ -3,11 +3,10 @@ chcp 65001 >nul 2>&1
 title MiniDB Node Launcher
 
 set "BASE=%~dp0"
-set "CLUSTER_PEERS=127.0.0.1:9527,127.0.0.1:9528,127.0.0.1:9529"
 set "JAR_PATH=%BASE%target\mini-database-1.0.0.jar"
 
 if not exist "%JAR_PATH%" (
-    echo [ERROR] %JAR_PATH% not found. Run: mvn clean package
+    echo [ERROR] JAR not found. Run: mvn clean package
     pause
     exit /b 1
 )
@@ -16,20 +15,19 @@ if not exist "%JAR_PATH%" (
 cls
 echo ===================== MiniDB Node Launcher =====================
 echo.
-echo This tool starts one cluster node at a time.
-echo Run it multiple times to start multiple nodes.
-echo Cluster peers: %CLUSTER_PEERS%
-echo.
 
 set /p PORT="Enter port [9527]: "
 if "%PORT%"=="" set PORT=9527
 
-start "Node-%PORT%" cmd /c "java -jar "%JAR_PATH%" %PORT% --cluster --peers %CLUSTER_PEERS% ^& pause"
+set "DEFAULT_PEERS=127.0.0.1:%PORT%"
+set /p PEERS="Enter peers (comma-separated host:port) [%DEFAULT_PEERS%]: "
+if "%PEERS%"=="" set PEERS=%DEFAULT_PEERS%
+
+start "Node-%PORT%" cmd /c "java -jar ""%JAR_PATH%"" %PORT% --cluster --peers %PEERS% ^& pause"
 
 echo.
-echo [OK] Node %PORT% started in a new window.
+echo [OK] Node %PORT% started. Peers: %PEERS%
 echo.
-echo Choose action:
 echo   1. Start another node
 echo   2. Exit
 echo.
