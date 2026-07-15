@@ -37,10 +37,24 @@ echo 所有节点已启动！
 echo 每个节点运行在独立的窗口中。
 echo 集群将自动选举主节点和从节点。
 echo.
-echo 启动客户端(集群选择模式):
-echo   java -cp target/mini-database-1.0.0.jar com.database.client.ClientMain 127.0.0.1 9527 --cluster
+
+:menu
+echo 请选择操作:
+echo   1. 启动客户端（集群选择模式）
+echo   2. 直接连接节点 9527
+echo   3. 退出
 echo.
-echo 启动客户端(直连模式):
-echo   java -cp target/mini-database-1.0.0.jar com.database.client.ClientMain 127.0.0.1 9527
-echo.
-pause
+set /p choice="请输入选项 (1/2/3): "
+
+if "%choice%"=="1" (
+    start "Client" cmd /c "java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9527 --cluster ^& pause"
+    goto menu
+)
+if "%choice%"=="2" (
+    start "Client" cmd /c "java -cp "%JAR_PATH%" com.database.client.ClientMain 127.0.0.1 9527 ^& pause"
+    goto menu
+)
+if "%choice%"=="3" exit /b
+
+echo 无效选项，请重新输入
+goto menu
