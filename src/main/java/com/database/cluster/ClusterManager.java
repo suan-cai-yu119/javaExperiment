@@ -170,7 +170,6 @@ public class ClusterManager {
                         s.connect(new InetSocketAddress(peerHost, peerClusterPort), 2000);
                         s.setSoTimeout(3000);
                         ClusterReplicator.exchangeNodes(s, this, currentNodeId, currentHost, clientPort);
-                        topologyChanged = true;
                         System.out.println("[OK] 同步中发现节点: " + addr);
                     } catch (Exception e) {
                         LOGGER.finest("节点 " + addr + " 仍不可达");
